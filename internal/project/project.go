@@ -1,12 +1,15 @@
 package project
 
 import (
+	"bufio"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 var root string = must(projectRoot())
+var modName string = must(moduleName())
 
 func must[T any](obj T, err error) T {
 	if err != nil {
@@ -27,19 +30,12 @@ func fileExists(filename string) (bool, error) {
 }
 
 func projectRoot() (string, error) {
-	root, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
+	root := must(os.Getwd())
 
 	var goMod string
-	for len(root) > 1 {
+	for root != filepath.Dir(root) {
 		goMod = filepath.Join(root, "go.mod")
-		exists, err := fileExists(goMod)
-		if err != nil {
-			return "", err
-		}
-
+		exists := must(fileExists(goMod))
 		if exists {
 			return root, nil
 		}
@@ -47,11 +43,41 @@ func projectRoot() (string, error) {
 		root = filepath.Dir(root)
 	}
 
-	return "", nil
+	goMod = filepath.Join(root, "go.mod")
+	exists := must(fileExists(goMod))
+	if exists {
+		return root, nil
+	}
+
+	return "", errors.New("nova: golang project not found")
+}
+
+func moduleName() (string, error) {
+	goMod := filepath.Join(root, "go.mod")
+
+	file := must(os.Open(goMod))
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "module") {
+			parts := strings.Fields(line)
+			if len(parts) > 1 {
+				return parts[1], nil
+			}
+		}
+	}
+
+	return "", errors.New("nova: module name not found")
 }
 
 func Root() string {
 	return root
+}
+
+func ModuleName() string {
+	return modName
 }
 
 func Abs(dir string) string {

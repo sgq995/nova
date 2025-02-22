@@ -14,6 +14,8 @@ func main() {
 	routes, _ := generator.FindRoutes("src/pages")
 	fmt.Println(routes)
 
+	generator.GenerateServer(routes)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
