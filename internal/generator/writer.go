@@ -16,8 +16,29 @@ type Option struct {
 	value any
 }
 
-func OptionImport() *Option {
-	return nil
+func OptionImport(alias, path string) *Option {
+	return &Option{
+		key: "Imports",
+		value: importStmt{
+			Alias: alias,
+			Path:  path,
+		},
+	}
+}
+
+func OptionProxy(addr string) *Option {
+	return &Option{
+		key: "Middlewares",
+		value: middleware{
+			Imports: []importStmt{
+				{Alias: "", Path: "net/http/httputil"},
+				{Alias: "", Path: "net/url"},
+			},
+			Decl: proxyMiddlewareDecl,
+			Name: "withReverseProxy",
+			Args: []any{`"http://` + addr + `"`},
+		},
+	}
 }
 
 func alias(r *RouteInfo) string {
@@ -34,6 +55,13 @@ type route struct {
 	Handler string
 }
 
+type middleware struct {
+	Imports []importStmt
+	Decl    string
+	Name    string
+	Args    []any
+}
+
 func defaultData() map[string]any {
 	return map[string]any{
 		"Imports": []importStmt{},
@@ -45,6 +73,8 @@ func defaultData() map[string]any {
 
 		"Static": "",
 
+		"Middlewares": []middleware{},
+
 		"Host": "",
 		"Port": "8080",
 	}
@@ -53,7 +83,22 @@ func defaultData() map[string]any {
 func createData(options ...*Option) map[string]any {
 	data := defaultData()
 	for _, opt := range options {
-		data[opt.key] = opt.value
+		switch old := data[opt.key].(type) {
+		case []middleware:
+			if v, ok := opt.value.(middleware); ok {
+				data[opt.key] = append(old, v)
+			}
+
+		case []any:
+			if v, ok := opt.value.([]any); ok {
+				data[opt.key] = slices.Concat(old, v)
+			} else {
+				data[opt.key] = append(old, opt.value)
+			}
+
+		default:
+			data[opt.key] = opt.value
+		}
 	}
 	return data
 }

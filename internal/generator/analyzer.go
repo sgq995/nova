@@ -98,7 +98,7 @@ func FindRoutes(dir string) ([]RouteInfo, error) {
 
 	target := project.Abs(dir)
 
-	log.Println("Search for routes at", dir)
+	log.Println("searching routes:", dir)
 	errs = append(errs, filepath.WalkDir(target, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
