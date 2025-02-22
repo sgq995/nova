@@ -8,10 +8,11 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"segoqu.com/nova/internal/project"
 )
 
 type Kind int
@@ -29,50 +30,6 @@ type RouteInfo struct {
 	Kind    Kind
 }
 
-var root string = must(projectRoot())
-
-func must[T any](obj T, err error) T {
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-
-func fileExists(filename string) (bool, error) {
-	_, err := os.Stat(filename)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-func projectRoot() (string, error) {
-	root, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-
-	var goMod string
-	for len(root) > 1 {
-		goMod = filepath.Join(root, "go.mod")
-		exists, err := fileExists(goMod)
-		if err != nil {
-			return "", err
-		}
-
-		if exists {
-			return root, nil
-		}
-
-		root = filepath.Dir(root)
-	}
-
-	return "", nil
-}
-
 func parseGoFile(filename, dir string) ([]RouteInfo, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filename, nil, parser.AllErrors)
@@ -80,7 +37,7 @@ func parseGoFile(filename, dir string) ([]RouteInfo, error) {
 		return nil, err
 	}
 
-	pkg := strings.TrimPrefix(filename, root+"/")
+	pkg := strings.TrimPrefix(filename, project.Root()+"/")
 	pkg = filepath.Dir(pkg)
 
 	basename := strings.TrimPrefix(filename, dir+"/")
@@ -136,10 +93,7 @@ func FindRoutes(dir string) ([]RouteInfo, error) {
 	var routes []RouteInfo
 	var errs []error
 
-	target := dir
-	if !filepath.IsAbs(target) {
-		target = filepath.Join(root, dir)
-	}
+	target := project.Abs(dir)
 
 	log.Println("Search for routes at", dir)
 	errs = append(errs, filepath.WalkDir(target, func(path string, d fs.DirEntry, err error) error {
