@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/evanw/esbuild/pkg/api"
+	"segoqu.com/nova/internal/bundler"
 	"segoqu.com/nova/internal/generator"
 )
 
@@ -23,6 +25,11 @@ func main() {
 		fmt.Println(s)
 	})
 	go watcher.Watch("src/pages")
+
+	esbuild, _ := bundler.Development("src/pages")
+	serve, _ := esbuild.Serve(api.ServeOptions{Port: 0})
+	fmt.Println(serve)
+	defer esbuild.Dispose()
 
 	<-ctx.Done()
 }
