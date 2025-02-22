@@ -6,11 +6,16 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
+	"os/signal"
+	"path/filepath"
 	"strconv"
+	"syscall"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"segoqu.com/nova/internal/bundler"
 	"segoqu.com/nova/internal/generator"
+	"segoqu.com/nova/internal/project"
 )
 
 func must[T any](obj T, err error) T {
@@ -21,11 +26,30 @@ func must[T any](obj T, err error) T {
 }
 
 func dev() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	command := func(ctx context.Context) *exec.Cmd {
+		cmd := exec.CommandContext(ctx, "go", "run", project.Abs(filepath.Join(".nova", "main.go")))
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd
+	}
 
-	esbuild := must(bundler.Development("src/pages"))
-	defer esbuild.Dispose()
+	start := func(cmd *exec.Cmd) {
+		err := cmd.Start()
+		if err != nil {
+			log.Fatalln(err)
+		}
+	}
+
+	stop := func(cmd *exec.Cmd) {
+		cmd.Process.Signal(os.Interrupt)
+		syscall.Kill(-cmd.Process.Pid, syscall.SIGINT)
+		cmd.Wait()
+
+		cmd.Process.Kill()
+		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
 
 	generate := func(addr string) {
 		routes := must(generator.FindRoutes("src/pages"))
@@ -34,6 +58,24 @@ func dev() {
 			panic(err)
 		}
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cmd := command(ctx)
+
+	esbuild := must(bundler.Development("src/pages"))
+	defer esbuild.Dispose()
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGABRT, syscall.SIGTERM, syscall.SIGKILL)
+
+	go func() {
+		<-sig
+		stop(cmd)
+		esbuild.Dispose()
+		cancel()
+	}()
 
 	serve := must(esbuild.Serve(api.ServeOptions{Port: 0}))
 	for _, host := range serve.Hosts {
@@ -46,9 +88,16 @@ func dev() {
 	addr := serve.Hosts[0] + ":" + strconv.Itoa(int(serve.Port))
 
 	generate(addr)
+	start(cmd)
+
 	watcher := generator.NewWatcher(ctx, "*.go", func(s string) {
 		log.Println("[reload]", s)
+
+		stop(cmd)
+		cmd = command(ctx)
+
 		generate(addr)
+		start(cmd)
 	})
 	go watcher.Watch("src/pages")
 
