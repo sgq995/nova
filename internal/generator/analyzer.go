@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -36,6 +37,8 @@ func parseGoFile(filename, dir string) ([]RouteInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	filename = path.Join(filepath.SplitList(filename)...)
 
 	pkg := strings.TrimPrefix(filename, project.Root()+"/")
 	pkg = filepath.Dir(pkg)
