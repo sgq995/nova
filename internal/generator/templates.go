@@ -8,14 +8,14 @@ import (
 	"net/http"
 )
 
-{{ range .Imports }}
+{{ range .Imports -}}
 import {{ .Alias }} "{{ .Path }}"
 {{ end }}
 
-{{ range .Middlewares }}
-	{{ range .Imports }}
+{{ range .Middlewares -}}
+	{{- range .Imports }}
 import {{ .Alias }} "{{ .Path }}"
-	{{ end }}
+	{{- end }}
 {{ end }}
 
 {{ .Embed }}
@@ -41,20 +41,20 @@ func RenderHandler(render func(*template.Template, http.ResponseWriter, *http.Re
 func main() {
 	r := NewRouter()
 
-	{{ range .SSRRoutes }}
+	{{ range .SSRRoutes -}}
 	r.Handle("{{ .Path }}", RenderHandler({{ .Handler }}))
 	{{ end }}
 
-	{{ range .APIRoutes }}
+	{{ range .APIRoutes -}}
 	r.HandleFunc("{{ .Path }}", {{ .Handler }})
 	{{ end }}
 
 	{{ .Static }}
 
 	var h http.Handler = r
-	{{ range .Middlewares }}
-	h = {{ .Name }}(h{{ range .Args }} ,{{ . }} {{ end }})
-	{{ end }}
+	{{- range .Middlewares }}
+	h = {{ .Name }}(h{{ range .Args -}} , {{ . -}} {{ end }})
+	{{- end }}
 
 	s := http.Server{
 		Addr:    "{{ .Host }}:{{ .Port }}",
