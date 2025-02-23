@@ -14,6 +14,7 @@ func findFiles(dir string) ([]string, error) {
 		".jsx": true,
 		".ts":  true,
 		".tsx": true,
+		".css": true,
 	}
 
 	var files []string
@@ -53,7 +54,7 @@ func Development(dir string) (api.BuildContext, error) {
 		Format:      api.FormatESModule,
 		Splitting:   true,
 		Outdir:      outDir,
-		Sourcemap:   api.SourceMapInline,
+		Sourcemap:   api.SourceMapLinked,
 	})
 	if ctxErr != nil {
 		return nil, ctxErr
