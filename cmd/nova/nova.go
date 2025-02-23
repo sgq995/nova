@@ -40,6 +40,7 @@ func dev() {
 		if err != nil {
 			log.Fatalln(err)
 		}
+		log.Println("[server] started http://localhost:8080")
 	}
 
 	stop := func(cmd *exec.Cmd) {
@@ -49,6 +50,7 @@ func dev() {
 
 		cmd.Process.Kill()
 		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		log.Println("[server] stoped")
 	}
 
 	generate := func(addr string) {
@@ -76,6 +78,11 @@ func dev() {
 		esbuild.Dispose()
 		cancel()
 	}()
+
+	err := esbuild.Watch(api.WatchOptions{})
+	if err != nil {
+		log.Fatalln(err)
+	}
 
 	serve := must(esbuild.Serve(api.ServeOptions{Port: 0}))
 	for _, host := range serve.Hosts {
