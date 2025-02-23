@@ -84,7 +84,7 @@ func dev() {
 		log.Fatalln(err)
 	}
 
-	serve := must(esbuild.Serve(api.ServeOptions{Port: 0}))
+	serve := must(esbuild.Serve(api.ServeOptions{Host: "127.0.0.1", Port: 0}))
 	for _, host := range serve.Hosts {
 		log.Println(
 			"[esbuild]", "bundler server listening at",
