@@ -1,12 +1,16 @@
 package bundler
 
 import (
+	_ "embed"
 	"io/fs"
 	"path/filepath"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"segoqu.com/nova/internal/project"
 )
+
+//go:embed hmr.js
+var hmr string
 
 func findFiles(dir string) ([]string, error) {
 	validExtensions := map[string]bool{
@@ -47,6 +51,23 @@ func Development(dir string) (api.BuildContext, error) {
 		return nil, err
 	}
 
+	// TODO: run on init
+	hmrResult := api.Build(api.BuildOptions{
+		Stdin: &api.StdinOptions{
+			Contents: hmr,
+		},
+		Bundle:            true,
+		Format:            api.FormatESModule,
+		MinifyWhitespace:  true,
+		MinifyIdentifiers: true,
+		MinifySyntax:      true,
+		Sourcemap:         api.SourceMapNone,
+	})
+	if len(hmrResult.Errors) > 0 {
+		panic(hmrResult.Errors)
+	}
+	hmrBundle := string(hmrResult.OutputFiles[0].Contents)
+
 	outDir := project.Abs(filepath.Join(".nova", "static"))
 	ctx, ctxErr := api.Context(api.BuildOptions{
 		EntryPoints: entries,
@@ -55,6 +76,9 @@ func Development(dir string) (api.BuildContext, error) {
 		Splitting:   true,
 		Outdir:      outDir,
 		Sourcemap:   api.SourceMapLinked,
+		Banner: map[string]string{
+			"js": hmrBundle,
+		},
 	})
 	if ctxErr != nil {
 		return nil, ctxErr
