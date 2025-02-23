@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -121,6 +122,24 @@ func importRoutes(data map[string]any, routes []RouteInfo) {
 	}
 }
 
+func processImports(data map[string]any) {
+	imports := data["Imports"].([]importStmt)
+
+	if raw, exists := data["Middlewares"]; exists {
+		middlewares := raw.([]middleware)
+		for _, m := range middlewares {
+			imports = append(imports, m.Imports...)
+		}
+	}
+
+	set := make(map[string]importStmt)
+	for _, imprt := range imports {
+		set[imprt.Path] = imprt
+	}
+
+	data["Imports"] = slices.Collect(maps.Values(set))
+}
+
 func registerRoutes(data map[string]any, routes []RouteInfo) {
 	var ssrRoutes []route
 	var apiRoutes []route
@@ -163,6 +182,7 @@ func GenerateServer(routes []RouteInfo, options ...*Option) error {
 
 	data := createData(options...)
 	importRoutes(data, routes)
+	processImports(data)
 	registerRoutes(data, routes)
 
 	tmpl := template.Must(template.New("main").Parse(mainFile))

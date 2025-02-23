@@ -12,12 +12,6 @@ import (
 import {{ .Alias }} "{{ .Path }}"
 {{ end }}
 
-{{ range .Middlewares -}}
-	{{- range .Imports }}
-import {{ .Alias }} "{{ .Path }}"
-	{{- end }}
-{{ end }}
-
 {{ .Embed }}
 
 type Router struct {
