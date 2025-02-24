@@ -93,3 +93,38 @@ func withReverseProxy(next http.Handler, target string) http.Handler {
 		}
 	})
 }`
+
+var staticMiddlewareDecl = `//go:embed static
+var staticFS embed.FS
+
+type fileServerResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (w *fileServerResponseWriter) WriteHeader(statusCode int) {
+	w.statusCode = statusCode
+	if statusCode != http.StatusNotFound {
+		w.ResponseWriter.WriteHeader(statusCode)
+	}
+}
+
+func (w *fileServerResponseWriter) Write(content []byte) (int, error) {
+	if w.statusCode != http.StatusNotFound {
+		return w.ResponseWriter.Write(content)
+	}
+	return len(content), nil
+}
+
+func withFileServer(next http.Handler) http.Handler {
+	fs := http.FileServerFS(staticFS)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rw := &fileServerResponseWriter{ResponseWriter: w}
+		next.ServeHTTP(rw, r)
+
+		if rw.statusCode == http.StatusNotFound {
+			clear(w.Header())
+			fs.ServeHTTP(w, r)
+		}
+	})
+}`

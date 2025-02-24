@@ -32,12 +32,26 @@ func OptionProxy(addr string) *Option {
 		key: "Middlewares",
 		value: middleware{
 			Imports: []importStmt{
-				{Alias: "", Path: "net/http/httputil"},
-				{Alias: "", Path: "net/url"},
+				{Path: "net/http/httputil"},
+				{Path: "net/url"},
 			},
 			Decl: proxyMiddlewareDecl,
 			Name: "withReverseProxy",
 			Args: []any{`"http://` + addr + `"`},
+		},
+	}
+}
+
+func OptionStatic() *Option {
+	return &Option{
+		key: "Middlewares",
+		value: middleware{
+			Imports: []importStmt{
+				{Path: "embed"},
+			},
+			Decl: staticMiddlewareDecl,
+			Name: "withFileServer",
+			Args: []any{},
 		},
 	}
 }

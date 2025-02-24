@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -111,6 +112,25 @@ func dev() {
 	<-ctx.Done()
 }
 
+func build() {
+	esbuild := must(bundler.Production("src/pages"))
+	defer esbuild.Dispose()
+
+	result := esbuild.Rebuild()
+	if len(result.Errors) > 0 {
+		panic(result.Errors)
+	}
+	for _, file := range result.OutputFiles {
+		log.Println(strings.TrimPrefix(file.Path, project.Root()+"/"))
+	}
+
+	routes := must(generator.FindRoutes("src/pages"))
+	err := generator.GenerateServer(routes, generator.OptionStatic())
+	if err != nil {
+		panic(err)
+	}
+}
+
 func help() {
 	flag.Usage()
 	fmt.Fprintf(flag.CommandLine.Output(), "\t%s %s\n", os.Args[0], "dev|build")
@@ -138,6 +158,9 @@ func main() {
 	case "dev":
 		devCmd.Parse(os.Args[2:])
 		dev()
+
+	case "build":
+		build()
 
 	default:
 		help()

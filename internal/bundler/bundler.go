@@ -3,6 +3,7 @@ package bundler
 import (
 	_ "embed"
 	"io/fs"
+	"os"
 	"path/filepath"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -46,11 +47,6 @@ func findFiles(dir string) ([]string, error) {
 }
 
 func Development(dir string) (api.BuildContext, error) {
-	entries, err := findFiles("src/pages")
-	if err != nil {
-		return nil, err
-	}
-
 	// TODO: run on init
 	hmrResult := api.Build(api.BuildOptions{
 		Stdin: &api.StdinOptions{
@@ -68,6 +64,11 @@ func Development(dir string) (api.BuildContext, error) {
 	}
 	hmrBundle := string(hmrResult.OutputFiles[0].Contents)
 
+	entries, err := findFiles("src/pages")
+	if err != nil {
+		return nil, err
+	}
+
 	outDir := project.Abs(filepath.Join(".nova", "static"))
 	ctx, ctxErr := api.Context(api.BuildOptions{
 		EntryPoints: entries,
@@ -79,6 +80,48 @@ func Development(dir string) (api.BuildContext, error) {
 		Banner: map[string]string{
 			"js": hmrBundle,
 		},
+	})
+	if ctxErr != nil {
+		return nil, ctxErr
+	}
+
+	return ctx, nil
+}
+
+func Production(dir string) (api.BuildContext, error) {
+	entries, err := findFiles("src/pages")
+	if err != nil {
+		return nil, err
+	}
+
+	outDir := project.Abs(filepath.Join(".nova", "static"))
+	err = os.RemoveAll(outDir)
+	if err != nil {
+		return nil, err
+	}
+	err = os.MkdirAll(outDir, 0755)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, ctxErr := api.Context(api.BuildOptions{
+		EntryPoints: entries,
+
+		EntryNames: "[dir]/[name].[hash]",
+
+		Bundle: true,
+		Write:  true,
+
+		Format:    api.FormatESModule,
+		Splitting: true,
+
+		Outdir: outDir,
+
+		MinifyWhitespace:  true,
+		MinifyIdentifiers: true,
+		MinifySyntax:      true,
+
+		Sourcemap: api.SourceMapNone,
 	})
 	if ctxErr != nil {
 		return nil, ctxErr
