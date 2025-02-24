@@ -129,6 +129,21 @@ func build() {
 	if err != nil {
 		panic(err)
 	}
+
+	log.Println("[build] go build -o .nova/app")
+	in := filepath.Join(project.Root(), ".nova", "main.go")
+	out := filepath.Join(project.Root(), ".nova", "app")
+	cmd := exec.Command("go", "build", "-o", out, in)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err = cmd.Run()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	log.Println("[build] done")
 }
 
 func help() {
