@@ -2,14 +2,12 @@ package generator
 
 import (
 	"errors"
-	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
 	"log"
 	"net/http"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -30,6 +28,7 @@ type RouteInfo struct {
 	Package   string
 	Handler   string
 	Kind      Kind
+	Root      string
 	Templates []string
 }
 
@@ -40,7 +39,10 @@ func parseGoFile(filename, dir string) ([]RouteInfo, error) {
 		return nil, err
 	}
 
-	filename = path.Join(filepath.SplitList(filename)...)
+	filename = filepath.ToSlash(filename)
+
+	root := strings.TrimPrefix(filename, project.Root()+"/src/pages/")
+	root = filepath.Dir(root)
 
 	pkg := strings.TrimPrefix(filename, project.Root()+"/")
 	pkg = filepath.Dir(pkg)
@@ -52,7 +54,6 @@ func parseGoFile(filename, dir string) ([]RouteInfo, error) {
 	templates := []string{}
 	for _, cg := range f.Comments {
 		for _, c := range cg.List {
-			fmt.Println(c.Text)
 			if strings.HasPrefix(c.Text, "//nova:template ") {
 				filenames := strings.TrimPrefix(c.Text, "//nova:template ")
 				templates = slices.Concat(templates, strings.Split(filenames, " "))
@@ -98,6 +99,7 @@ func parseGoFile(filename, dir string) ([]RouteInfo, error) {
 				Package:   pkg,
 				Handler:   handler,
 				Kind:      kind,
+				Root:      root,
 				Templates: templates,
 			})
 		}

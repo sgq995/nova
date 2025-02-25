@@ -87,6 +87,7 @@ type importStmt struct {
 type route struct {
 	Path      string
 	Handler   string
+	Root      string
 	Templates []string
 }
 
@@ -196,6 +197,7 @@ func registerRoutes(data map[string]any, routes []RouteInfo) {
 		route := route{
 			Path:      r.Method + " " + r.Path,
 			Handler:   alias(&r) + "." + r.Handler,
+			Root:      r.Root,
 			Templates: r.Templates,
 		}
 
