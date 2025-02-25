@@ -19,8 +19,8 @@ func NewRouter() *Router {
 var templatesFS embed.FS
 {{end}}
 
-func loadTemplate(tmpl string) *template.Template {
-	if tmpl == "" {
+func loadTemplate(tmpls []string) *template.Template {
+	if len(tmpls) == 0 {
 		return nil
 	}
 
@@ -31,22 +31,26 @@ func loadTemplate(tmpl string) *template.Template {
 	}
 	{{else}}
 	root := filepath.Join("src", "pages")
-	filename := filepath.Join(root, tmpl)
+	filenames := []string{}
+	for _, tmpl := range tmpls {
+		filename := filepath.Join(root, tmpl)
+		filenames = append(filenames, filename)
+	}
 	{{end}}
 
-	t := template.New(tmpl)
+	t := template.New(tmpls[0])
 	{{if eq .Environment "prod"}}
-	t = template.Must(t.ParseFS(sub, tmpl))
+	t = template.Must(t.ParseFS(sub, tmpls...))
 	{{else}}
-	t = template.Must(t.ParseFiles(filename))
+	t = template.Must(t.ParseFiles(filenames...))
 	{{end}}
 	return t
 }
 
-func RenderHandler(tmpl string, render func(*template.Template, http.ResponseWriter, *http.Request) error) http.Handler {
-	{{if eq .Environment "prod"}}t := loadTemplate(tmpl){{end}}
+func RenderHandler(tmpls []string, render func(*template.Template, http.ResponseWriter, *http.Request) error) http.Handler {
+	{{if eq .Environment "prod"}}t := loadTemplate(tmpls){{end}}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		{{if eq .Environment "dev"}}t := loadTemplate(tmpl){{end}}
+		{{if eq .Environment "dev"}}t := loadTemplate(tmpls){{end}}
 		err := render(t, w, r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -62,7 +66,7 @@ func main() {
 	r := NewRouter()
 
 	{{range .SSRRoutes -}}
-	r.Handle("{{.Path}}", RenderHandler("{{.Template}}", {{.Handler}}))
+	r.Handle("{{.Path}}", RenderHandler([]string{ {{range .Templates}}"{{.}}", {{end}} }, {{.Handler}}))
 	{{end}}
 
 	{{range .APIRoutes -}}

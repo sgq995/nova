@@ -85,9 +85,9 @@ type importStmt struct {
 }
 
 type route struct {
-	Path     string
-	Handler  string
-	Template string
+	Path      string
+	Handler   string
+	Templates []string
 }
 
 type middleware struct {
@@ -194,9 +194,9 @@ func registerRoutes(data map[string]any, routes []RouteInfo) {
 
 	for _, r := range routes {
 		route := route{
-			Path:     r.Method + " " + r.Path,
-			Handler:  alias(&r) + "." + r.Handler,
-			Template: r.Template,
+			Path:      r.Method + " " + r.Path,
+			Handler:   alias(&r) + "." + r.Handler,
+			Templates: r.Templates,
 		}
 
 		switch r.Kind {

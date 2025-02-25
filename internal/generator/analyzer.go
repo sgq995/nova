@@ -25,12 +25,12 @@ const (
 )
 
 type RouteInfo struct {
-	Method   string
-	Path     string
-	Package  string
-	Handler  string
-	Kind     Kind
-	Template string
+	Method    string
+	Path      string
+	Package   string
+	Handler   string
+	Kind      Kind
+	Templates []string
 }
 
 func parseGoFile(filename, dir string) ([]RouteInfo, error) {
@@ -49,12 +49,13 @@ func parseGoFile(filename, dir string) ([]RouteInfo, error) {
 	basename = strings.TrimSuffix(basename, ".go")
 	basename = strings.TrimSuffix(basename, "index")
 
-	template := ""
+	templates := []string{}
 	for _, cg := range f.Comments {
 		for _, c := range cg.List {
 			fmt.Println(c.Text)
 			if strings.HasPrefix(c.Text, "//nova:template ") {
-				template = strings.TrimPrefix(c.Text, "//nova:template ")
+				filenames := strings.TrimPrefix(c.Text, "//nova:template ")
+				templates = slices.Concat(templates, strings.Split(filenames, " "))
 			}
 		}
 	}
@@ -92,12 +93,12 @@ func parseGoFile(filename, dir string) ([]RouteInfo, error) {
 			log.Println(method, route)
 
 			routes = append(routes, RouteInfo{
-				Method:   method,
-				Path:     route,
-				Package:  pkg,
-				Handler:  handler,
-				Kind:     kind,
-				Template: template,
+				Method:    method,
+				Path:      route,
+				Package:   pkg,
+				Handler:   handler,
+				Kind:      kind,
+				Templates: templates,
 			})
 		}
 	}
