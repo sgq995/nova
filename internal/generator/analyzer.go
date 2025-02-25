@@ -2,6 +2,7 @@ package generator
 
 import (
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -24,16 +25,17 @@ const (
 )
 
 type RouteInfo struct {
-	Method  string
-	Path    string
-	Package string
-	Handler string
-	Kind    Kind
+	Method   string
+	Path     string
+	Package  string
+	Handler  string
+	Kind     Kind
+	Template string
 }
 
 func parseGoFile(filename, dir string) ([]RouteInfo, error) {
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, filename, nil, parser.AllErrors)
+	f, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
@@ -46,6 +48,16 @@ func parseGoFile(filename, dir string) ([]RouteInfo, error) {
 	basename := strings.TrimPrefix(filename, dir+"/")
 	basename = strings.TrimSuffix(basename, ".go")
 	basename = strings.TrimSuffix(basename, "index")
+
+	template := ""
+	for _, cg := range f.Comments {
+		for _, c := range cg.List {
+			fmt.Println(c.Text)
+			if strings.HasPrefix(c.Text, "//nova:template ") {
+				template = strings.TrimPrefix(c.Text, "//nova:template ")
+			}
+		}
+	}
 
 	var routes []RouteInfo
 	for _, decl := range f.Decls {
@@ -80,11 +92,12 @@ func parseGoFile(filename, dir string) ([]RouteInfo, error) {
 			log.Println(method, route)
 
 			routes = append(routes, RouteInfo{
-				Method:  method,
-				Path:    route,
-				Package: pkg,
-				Handler: handler,
-				Kind:    kind,
+				Method:   method,
+				Path:     route,
+				Package:  pkg,
+				Handler:  handler,
+				Kind:     kind,
+				Template: template,
 			})
 		}
 	}

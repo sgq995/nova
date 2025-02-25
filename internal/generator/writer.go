@@ -56,6 +56,25 @@ func OptionStatic() *Option {
 	}
 }
 
+type Environment int
+
+const (
+	Dev Environment = iota
+	Prod
+)
+
+func OptionEnvironment(env Environment) *Option {
+	environment := "dev"
+	if env == Prod {
+		environment = "prod"
+	}
+
+	return &Option{
+		key:   "Environment",
+		value: environment,
+	}
+}
+
 func alias(r *RouteInfo) string {
 	return strings.ReplaceAll(r.Package, "/", "")
 }
@@ -66,8 +85,9 @@ type importStmt struct {
 }
 
 type route struct {
-	Path    string
-	Handler string
+	Path     string
+	Handler  string
+	Template string
 }
 
 type middleware struct {
@@ -79,9 +99,13 @@ type middleware struct {
 
 func defaultData() map[string]any {
 	return map[string]any{
-		"Imports": []importStmt{},
+		"Imports": []importStmt{
+			{Path: "html/template"},
+			{Path: "log"},
+			{Path: "net/http"},
+		},
 
-		"Embed": "",
+		"Environment": "",
 
 		"SSRRoutes": []route{},
 		"APIRoutes": []route{},
@@ -139,6 +163,16 @@ func importRoutes(data map[string]any, routes []RouteInfo) {
 func processImports(data map[string]any) {
 	imports := data["Imports"].([]importStmt)
 
+	if raw, exists := data["Environment"]; exists {
+		environment := raw.(string)
+		if environment == "prod" {
+			imports = append(imports, importStmt{Path: "embed"}, importStmt{Path: "io/fs"})
+		}
+		if environment == "dev" {
+			imports = append(imports, importStmt{Path: "path/filepath"})
+		}
+	}
+
 	if raw, exists := data["Middlewares"]; exists {
 		middlewares := raw.([]middleware)
 		for _, m := range middlewares {
@@ -160,8 +194,9 @@ func registerRoutes(data map[string]any, routes []RouteInfo) {
 
 	for _, r := range routes {
 		route := route{
-			Path:    r.Method + " " + r.Path,
-			Handler: alias(&r) + "." + r.Handler,
+			Path:     r.Method + " " + r.Path,
+			Handler:  alias(&r) + "." + r.Handler,
+			Template: r.Template,
 		}
 
 		switch r.Kind {

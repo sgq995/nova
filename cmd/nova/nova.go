@@ -56,7 +56,7 @@ func dev() {
 
 	generate := func(addr string) {
 		routes := must(generator.FindRoutes("src/pages"))
-		err := generator.GenerateServer(routes, generator.OptionProxy(addr))
+		err := generator.GenerateServer(routes, generator.OptionProxy(addr), generator.OptionEnvironment(generator.Dev))
 		if err != nil {
 			panic(err)
 		}
@@ -125,7 +125,7 @@ func build() {
 	}
 
 	routes := must(generator.FindRoutes("src/pages"))
-	err := generator.GenerateServer(routes, generator.OptionStatic())
+	err := generator.GenerateServer(routes, generator.OptionStatic(), generator.OptionEnvironment(generator.Prod))
 	if err != nil {
 		panic(err)
 	}

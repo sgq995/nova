@@ -2,17 +2,9 @@ package generator
 
 var mainFile string = `package main
 
-import (
-	"html/template"
-	"log"	
-	"net/http"
-)
-
-{{ range .Imports -}}
-import {{ .Alias }} "{{ .Path }}"
-{{ end }}
-
-{{ .Embed }}
+{{range .Imports -}}
+import {{.Alias}} "{{.Path}}"
+{{end}}
 
 type Router struct {
 	*http.ServeMux
@@ -22,36 +14,70 @@ func NewRouter() *Router {
 	return &Router{http.NewServeMux()}
 }
 
-func RenderHandler(render func(*template.Template, http.ResponseWriter, *http.Request)) http.Handler {
+{{if eq .Environment "prod"}}
+//go:embed templates
+var templatesFS embed.FS
+{{end}}
+
+func loadTemplate(tmpl string) *template.Template {
+	if tmpl == "" {
+		return nil
+	}
+
+	{{if eq .Environment "prod"}}
+	sub, err := fs.Sub(templatesFS, "templates")
+	if err != nil {
+		panic(err)
+	}
+	{{else}}
+	root := filepath.Join("src", "pages")
+	filename := filepath.Join(root, tmpl)
+	{{end}}
+
+	t := template.New(tmpl)
+	{{if eq .Environment "prod"}}
+	t = template.Must(t.ParseFS(sub, tmpl))
+	{{else}}
+	t = template.Must(t.ParseFiles(filename))
+	{{end}}
+	return t
+}
+
+func RenderHandler(tmpl string, render func(*template.Template, http.ResponseWriter, *http.Request) error) http.Handler {
+	{{if eq .Environment "prod"}}t := loadTemplate(tmpl){{end}}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		render(nil, w, r)
+		{{if eq .Environment "dev"}}t := loadTemplate(tmpl){{end}}
+		err := render(t, w, r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 }
 
-{{ range .Middlewares }}
-{{ .Decl }}
-{{ end }}
+{{range .Middlewares}}
+{{.Decl}}
+{{end}}
 
 func main() {
 	r := NewRouter()
 
-	{{ range .SSRRoutes -}}
-	r.Handle("{{ .Path }}", RenderHandler({{ .Handler }}))
-	{{ end }}
+	{{range .SSRRoutes -}}
+	r.Handle("{{.Path}}", RenderHandler("{{.Template}}", {{.Handler}}))
+	{{end}}
 
-	{{ range .APIRoutes -}}
-	r.HandleFunc("{{ .Path }}", {{ .Handler }})
-	{{ end }}
+	{{range .APIRoutes -}}
+	r.HandleFunc("{{.Path}}", {{.Handler}})
+	{{end}}
 
-	{{ .Static }}
+	{{.Static}}
 
 	var h http.Handler = r
-	{{- range .Middlewares }}
-	h = {{ .Name }}(h{{ range .Args -}} , {{ . -}} {{ end }})
-	{{- end }}
+	{{- range .Middlewares}}
+	h = {{.Name}}(h{{range .Args -}} , {{. -}} {{end}})
+	{{- end}}
 
 	s := http.Server{
-		Addr:    "{{ .Host }}:{{ .Port }}",
+		Addr:    "{{.Host}}:{{.Port}}",
 		Handler: h,
 	}
 	log.Fatalln(s.ListenAndServe())
