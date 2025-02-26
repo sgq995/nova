@@ -167,7 +167,11 @@ func processImports(data map[string]any) {
 	if raw, exists := data["Environment"]; exists {
 		environment := raw.(string)
 		if environment == "prod" {
-			imports = append(imports, importStmt{Path: "embed"}, importStmt{Path: "io/fs"})
+			imports = append(imports,
+				importStmt{Path: "embed"},
+				importStmt{Path: "io/fs"},
+				importStmt{Path: "path"},
+			)
 		}
 		if environment == "dev" {
 			imports = append(imports, importStmt{Path: "path/filepath"})

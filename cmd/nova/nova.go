@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -118,7 +119,11 @@ func build() {
 
 	result := esbuild.Rebuild()
 	if len(result.Errors) > 0 {
-		panic(result.Errors)
+		errs := []error{}
+		for _, e := range result.Errors {
+			errs = append(errs, errors.New(e.Text))
+		}
+		panic(errors.Join(errs...))
 	}
 	for _, file := range result.OutputFiles {
 		log.Println(strings.TrimPrefix(file.Path, project.Root()+"/"))

@@ -7,21 +7,15 @@ import (
 	"path/filepath"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/tdewolff/minify/v2"
+	"github.com/tdewolff/minify/v2/html"
 	"segoqu.com/nova/internal/project"
 )
 
 //go:embed hmr.js
 var hmr string
 
-func findFiles(dir string) ([]string, error) {
-	validExtensions := map[string]bool{
-		".js":  true,
-		".jsx": true,
-		".ts":  true,
-		".tsx": true,
-		".css": true,
-	}
-
+func findFiles(dir string, validExtensions map[string]bool) ([]string, error) {
 	var files []string
 	target := project.Abs(dir)
 	err := filepath.WalkDir(target, func(path string, d fs.DirEntry, err error) error {
@@ -64,7 +58,14 @@ func Development(dir string) (api.BuildContext, error) {
 	}
 	hmrBundle := string(hmrResult.OutputFiles[0].Contents)
 
-	entries, err := findFiles("src/pages")
+	validExtensions := map[string]bool{
+		".js":  true,
+		".jsx": true,
+		".ts":  true,
+		".tsx": true,
+		".css": true,
+	}
+	entries, err := findFiles("src/pages", validExtensions)
 	if err != nil {
 		return nil, err
 	}
@@ -89,21 +90,31 @@ func Development(dir string) (api.BuildContext, error) {
 }
 
 func Production(dir string) (api.BuildContext, error) {
-	entries, err := findFiles("src/pages")
+	validExtensions := map[string]bool{
+		".js":   true,
+		".jsx":  true,
+		".ts":   true,
+		".tsx":  true,
+		".css":  true,
+		".html": true,
+	}
+	entries, err := findFiles("src/pages", validExtensions)
 	if err != nil {
 		return nil, err
 	}
 
-	outDir := project.Abs(filepath.Join(".nova", "static"))
-	err = os.RemoveAll(outDir)
+	outDir := project.Abs(".nova")
+	staticDir := project.Abs(filepath.Join(".nova", "static"))
+	err = os.RemoveAll(staticDir)
 	if err != nil {
 		return nil, err
 	}
-	err = os.MkdirAll(outDir, 0755)
+	err = os.MkdirAll(staticDir, 0755)
 	if err != nil {
 		return nil, err
 	}
 
+	// TODO: independent context for html files only to save html files without hash
 	ctx, ctxErr := api.Context(api.BuildOptions{
 		EntryPoints: entries,
 
@@ -112,16 +123,60 @@ func Production(dir string) (api.BuildContext, error) {
 		Bundle: true,
 		Write:  true,
 
+		Metafile: true,
+
 		Format:    api.FormatESModule,
 		Splitting: true,
 
-		Outdir: outDir,
+		Outdir: staticDir,
 
 		MinifyWhitespace:  true,
 		MinifyIdentifiers: true,
 		MinifySyntax:      true,
 
 		Sourcemap: api.SourceMapNone,
+
+		Plugins: []api.Plugin{
+			{
+				Name: "nova-manifest",
+				Setup: func(pb api.PluginBuild) {
+					pb.OnEnd(func(result *api.BuildResult) (api.OnEndResult, error) {
+						os.WriteFile(filepath.Join(outDir, "meta.json"), []byte(result.Metafile), 0755)
+						return api.OnEndResult{}, nil
+					})
+				},
+			},
+			{
+				Name: "nova-html",
+				Setup: func(pb api.PluginBuild) {
+					pb.OnLoad(api.OnLoadOptions{Filter: "\\.html$"}, func(ola api.OnLoadArgs) (api.OnLoadResult, error) {
+						b, err := os.ReadFile(ola.Path)
+						if err != nil {
+							return api.OnLoadResult{}, err
+						}
+
+						contents := string(b)
+
+						m := minify.New()
+						m.AddFunc("text/html", html.Minify)
+						contents, err = m.String("text/html", contents)
+						if err != nil {
+							return api.OnLoadResult{}, err
+						}
+
+						return api.OnLoadResult{
+							Contents: &contents,
+							Loader:   api.LoaderCopy,
+						}, nil
+					})
+
+					pb.OnEnd(func(result *api.BuildResult) (api.OnEndResult, error) {
+						// TODO: convert scripts and links to respective css and js
+						return api.OnEndResult{}, nil
+					})
+				},
+			},
+		},
 	})
 	if ctxErr != nil {
 		return nil, ctxErr
