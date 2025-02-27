@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
-	"github.com/sgq995/nova/internal/project"
+	"github.com/sgq995/nova/internal/module"
 	"github.com/tdewolff/minify/v2"
 	minifyHtml "github.com/tdewolff/minify/v2/html"
 	"golang.org/x/net/html"
@@ -25,7 +25,7 @@ var hmr string
 
 func findFiles(dir string, validExtensions map[string]bool) ([]string, error) {
 	var files []string
-	target := project.Abs(dir)
+	target := module.Abs(dir)
 	err := filepath.WalkDir(target, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -90,7 +90,7 @@ func Development(dir string) (api.BuildContext, error) {
 		return nil, err
 	}
 
-	outDir := project.Abs(filepath.Join(".nova", "static"))
+	outDir := module.Abs(filepath.Join(".nova", "static"))
 	ctx, ctxErr := api.Context(api.BuildOptions{
 		EntryPoints: entries,
 		Bundle:      true,
@@ -163,13 +163,13 @@ func Production(dir string) (api.BuildContext, error) {
 		return nil, err
 	}
 
-	outDir := project.Abs(".nova")
-	staticDir := project.Abs(filepath.Join(".nova", "static"))
+	outDir := module.Abs(".nova")
+	staticDir := module.Abs(filepath.Join(".nova", "static"))
 	err = cleanDir(staticDir)
 	if err != nil {
 		return nil, err
 	}
-	templatesDir := project.Abs(filepath.Join(".nova", "templates"))
+	templatesDir := module.Abs(filepath.Join(".nova", "templates"))
 	err = cleanDir(templatesDir)
 	if err != nil {
 		return nil, err
@@ -260,7 +260,7 @@ func Production(dir string) (api.BuildContext, error) {
 							srcMap[inSrc] = outSrc
 						}
 
-						currentDir := strings.TrimPrefix(ola.Path, filepath.Join(project.Root(), dir))
+						currentDir := strings.TrimPrefix(ola.Path, filepath.Join(module.Root(), dir))
 						currentDir = filepath.Dir(currentDir)
 						currentDir = filepath.ToSlash(currentDir)
 

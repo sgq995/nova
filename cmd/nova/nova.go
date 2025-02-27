@@ -17,7 +17,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/sgq995/nova/internal/bundler"
 	"github.com/sgq995/nova/internal/generator"
-	"github.com/sgq995/nova/internal/project"
+	"github.com/sgq995/nova/internal/module"
 )
 
 func must[T any](obj T, err error) T {
@@ -29,7 +29,7 @@ func must[T any](obj T, err error) T {
 
 func dev() {
 	command := func(ctx context.Context) *exec.Cmd {
-		cmd := exec.CommandContext(ctx, "go", "run", project.Abs(filepath.Join(".nova", "main.go")))
+		cmd := exec.CommandContext(ctx, "go", "run", module.Abs(filepath.Join(".nova", "main.go")))
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
@@ -126,7 +126,7 @@ func build() {
 		panic(errors.Join(errs...))
 	}
 	for _, file := range result.OutputFiles {
-		log.Println(strings.TrimPrefix(file.Path, project.Root()+"/"))
+		log.Println(strings.TrimPrefix(file.Path, module.Root()+"/"))
 	}
 
 	routes := must(generator.FindRoutes("src/pages"))
@@ -136,8 +136,8 @@ func build() {
 	}
 
 	log.Println("[build] go build -o .nova/app")
-	in := filepath.Join(project.Root(), ".nova", "main.go")
-	out := filepath.Join(project.Root(), ".nova", "app")
+	in := filepath.Join(module.Root(), ".nova", "main.go")
+	out := filepath.Join(module.Root(), ".nova", "app")
 	cmd := exec.Command("go", "build", "-o", out, in)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -160,7 +160,7 @@ func main() {
 	// configFileSet := flag.NewFlagSet("config-file", flag.ContinueOnError)
 	// configFile := configFileSet.String(
 	// 	"config-file",
-	// 	filepath.Join(project.Root(), "nova.config.json"),
+	// 	filepath.Join(module.Root(), "nova.config.json"),
 	// 	"A JSON config file",
 	// )
 	// configFileSet.Parse(os.Args)

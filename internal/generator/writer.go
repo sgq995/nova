@@ -9,7 +9,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/sgq995/nova/internal/project"
+	"github.com/sgq995/nova/internal/module"
 )
 
 type Option struct {
@@ -149,7 +149,7 @@ func importRoutes(data map[string]any, routes []RouteInfo) {
 	for _, r := range routes {
 		routeImports = append(routeImports, importStmt{
 			Alias: alias(&r),
-			Path:  path.Join(project.ModuleName(), r.Package),
+			Path:  path.Join(module.ModuleName(), r.Package),
 		})
 	}
 
@@ -222,7 +222,7 @@ func registerRoutes(data map[string]any, routes []RouteInfo) {
 }
 
 func GenerateServer(routes []RouteInfo, options ...*Option) error {
-	outDir := filepath.Join(project.Root(), ".nova")
+	outDir := filepath.Join(module.Root(), ".nova")
 	err := os.MkdirAll(outDir, 0755)
 	if err != nil {
 		return err

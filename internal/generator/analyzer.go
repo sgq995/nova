@@ -12,7 +12,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/sgq995/nova/internal/project"
+	"github.com/sgq995/nova/internal/module"
 )
 
 type Kind int
@@ -41,10 +41,10 @@ func parseGoFile(filename, dir string) ([]RouteInfo, error) {
 
 	filename = filepath.ToSlash(filename)
 
-	root := strings.TrimPrefix(filename, project.Root()+"/src/pages/")
+	root := strings.TrimPrefix(filename, module.Root()+"/src/pages/")
 	root = filepath.Dir(root)
 
-	pkg := strings.TrimPrefix(filename, project.Root()+"/")
+	pkg := strings.TrimPrefix(filename, module.Root()+"/")
 	pkg = filepath.Dir(pkg)
 
 	basename := strings.TrimPrefix(filename, dir+"/")
@@ -112,7 +112,7 @@ func FindRoutes(dir string) ([]RouteInfo, error) {
 	var routes []RouteInfo
 	var errs []error
 
-	target := project.Abs(dir)
+	target := module.Abs(dir)
 
 	log.Println("searching routes:", dir)
 	errs = append(errs, filepath.WalkDir(target, func(path string, d fs.DirEntry, err error) error {

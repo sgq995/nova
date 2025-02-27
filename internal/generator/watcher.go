@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/sgq995/nova/internal/project"
+	"github.com/sgq995/nova/internal/module"
 )
 
 type Watcher struct {
@@ -27,7 +27,7 @@ func NewWatcher(ctx context.Context, pattern string, onChange func(string)) *Wat
 }
 
 func (w *Watcher) Watch(dir string) {
-	target := project.Abs(dir)
+	target := module.Abs(dir)
 
 	for {
 		err := filepath.WalkDir(target, func(path string, d fs.DirEntry, err error) error {
