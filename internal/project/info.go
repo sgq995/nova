@@ -69,5 +69,6 @@ func Abs(dir string) string {
 	if !filepath.IsAbs(target) {
 		target = filepath.Join(root, dir)
 	}
+
 	return target
 }
