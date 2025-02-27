@@ -12,7 +12,7 @@ import (
 	"slices"
 	"strings"
 
-	"segoqu.com/nova/internal/project"
+	"github.com/sgq995/nova/internal/project"
 )
 
 type Kind int

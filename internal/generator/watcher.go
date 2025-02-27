@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"segoqu.com/nova/internal/project"
+	"github.com/sgq995/nova/internal/project"
 )
 
 type Watcher struct {

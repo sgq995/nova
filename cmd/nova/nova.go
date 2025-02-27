@@ -15,9 +15,9 @@ import (
 	"syscall"
 
 	"github.com/evanw/esbuild/pkg/api"
-	"segoqu.com/nova/internal/bundler"
-	"segoqu.com/nova/internal/generator"
-	"segoqu.com/nova/internal/project"
+	"github.com/sgq995/nova/internal/bundler"
+	"github.com/sgq995/nova/internal/generator"
+	"github.com/sgq995/nova/internal/project"
 )
 
 func must[T any](obj T, err error) T {

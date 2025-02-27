@@ -9,7 +9,7 @@ import (
 	"strings"
 	"text/template"
 
-	"segoqu.com/nova/internal/project"
+	"github.com/sgq995/nova/internal/project"
 )
 
 type Option struct {

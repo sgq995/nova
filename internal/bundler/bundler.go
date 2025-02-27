@@ -13,11 +13,11 @@ import (
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/sgq995/nova/internal/project"
 	"github.com/tdewolff/minify/v2"
 	minifyHtml "github.com/tdewolff/minify/v2/html"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
-	"segoqu.com/nova/internal/project"
 )
 
 //go:embed hmr.js
