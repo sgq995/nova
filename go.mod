@@ -1,4 +1,4 @@
-module segoqu.com/nova
+module github.com/sgq995/nova
 
 go 1.23.5
 
