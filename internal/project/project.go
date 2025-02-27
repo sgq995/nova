@@ -6,36 +6,20 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/sgq995/nova/internal/utils"
 )
 
-var root string = must(projectRoot())
-var modName string = must(moduleName())
-
-func must[T any](obj T, err error) T {
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-
-func fileExists(filename string) (bool, error) {
-	_, err := os.Stat(filename)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
+var root string = utils.Must(projectRoot())
+var modName string = utils.Must(moduleName())
 
 func projectRoot() (string, error) {
-	root := must(os.Getwd())
+	root := utils.Must(os.Getwd())
 
 	var goMod string
 	for root != filepath.Dir(root) {
 		goMod = filepath.Join(root, "go.mod")
-		exists := must(fileExists(goMod))
+		exists := utils.Must(utils.FileExists(goMod))
 		if exists {
 			return root, nil
 		}
@@ -44,7 +28,7 @@ func projectRoot() (string, error) {
 	}
 
 	goMod = filepath.Join(root, "go.mod")
-	exists := must(fileExists(goMod))
+	exists := utils.Must(utils.FileExists(goMod))
 	if exists {
 		return root, nil
 	}
@@ -55,7 +39,7 @@ func projectRoot() (string, error) {
 func moduleName() (string, error) {
 	goMod := filepath.Join(root, "go.mod")
 
-	file := must(os.Open(goMod))
+	file := utils.Must(os.Open(goMod))
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
