@@ -2,11 +2,12 @@ package parser
 
 import (
 	"bytes"
+	"go/ast"
 	"go/parser"
 	"go/token"
+	"net/http"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -20,13 +21,17 @@ func ParseImportsGo(filename string) ([]string, error) {
 		return nil, err
 	}
 
+	basepath := filepath.Dir(filename)
+
 	imports := []string{}
 	for _, cg := range f.Comments {
 		for _, c := range cg.List {
 			if strings.HasPrefix(c.Text, "//nova:template ") {
 				data := strings.TrimPrefix(c.Text, "//nova:template ")
 				files := strings.Split(data, " ")
-				imports = slices.Concat(imports, files)
+				for _, f := range files {
+					imports = append(imports, filepath.Clean(filepath.Join(basepath, f)))
+				}
 			}
 		}
 	}
@@ -80,11 +85,30 @@ func ParseImportsHTML(filename string) ([]string, error) {
 	return imports, nil
 }
 
-// func ParseRoutesGo(filename string) ([]string, error) {
-// 	fset := token.NewFileSet()
-// 	f, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+func ParseRouteHandlersGo(filename string) ([]string, error) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
 
-// }
+	handlers := []string{}
+	for _, decl := range f.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || !fn.Name.IsExported() {
+			continue
+		}
+
+		identifier := strings.ToUpper(fn.Name.Name)
+
+		switch identifier {
+		case "RENDER":
+			handlers = append(handlers, fn.Name.Name)
+
+		case http.MethodConnect, http.MethodDelete, http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodPatch, http.MethodPost, http.MethodPut, http.MethodTrace:
+			handlers = append(handlers, fn.Name.Name)
+		}
+	}
+
+	return handlers, nil
+}
