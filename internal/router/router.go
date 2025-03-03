@@ -1,43 +1,80 @@
 package router
 
 import (
-	"go/parser"
-	"go/token"
+	"net/http"
 	"path"
 	"path/filepath"
-	"slices"
+	"strings"
 
 	"github.com/sgq995/nova/internal/module"
+	"github.com/sgq995/nova/internal/parser"
 )
 
 type Route interface {
 	Pattern() string
 }
 
-type Router struct {
-	Routes []Route
+type routeImpl struct {
+	method string
+	path   string
 }
 
-func NewRouter(files []string) (*Router, error) {
-	routes, err := parse(files)
+func (r *routeImpl) Pattern() string {
+	return r.method + " " + r.path
+}
+
+type Router struct {
+	Routes map[string][]Route
+}
+
+func NewRouter(base string, files []string) (*Router, error) {
+	routes, err := parse(base, files)
 	if err != nil {
 		return nil, err
 	}
 	return &Router{Routes: routes}, nil
 }
 
-func parseGoFile(filename string) ([]Route, error) {
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
+func parseGoFile(base, filename string) ([]Route, error) {
+	handlers, err := parser.ParseRouteHandlersGo(filename)
 	if err != nil {
 		return nil, err
 	}
 
-	basepath, _ := filepath.Rel(module.Root(), filename)
+	basepath := module.Abs(base)
 
-	routePath := path.Dir(basepath)
+	routePath, _ := filepath.Rel(basepath, filepath.Dir(filename))
+	routePath = filepath.ToSlash(routePath)
+	routePath = path.Clean("/" + routePath)
 
 	routes := []Route{}
+	for _, h := range handlers {
+		method := strings.ToUpper(h)
+		if method == "RENDER" {
+			method = http.MethodGet
+		} else {
+			routePath = path.Join("/api", routePath)
+		}
+
+		// TODO: config traling slashes
+		if strings.HasSuffix(routePath, "/") {
+			// non-root routes
+			if len(routePath) > 1 {
+				routes = append(routes, &routeImpl{
+					method: method,
+					path:   strings.TrimSuffix(routePath, "/"),
+				})
+			}
+
+			routePath += "{$}"
+		}
+
+		routes = append(routes, &routeImpl{
+			method: method,
+			path:   routePath,
+		})
+	}
+
 	return routes, nil
 }
 
@@ -49,22 +86,22 @@ func parseHTMLFile(filename string) Route {
 	return nil
 }
 
-func parse(files []string) ([]Route, error) {
-	routes := []Route{}
+func parse(base string, files []string) (map[string][]Route, error) {
+	routes := map[string][]Route{}
 	for _, filename := range files {
 		switch filepath.Ext(filename) {
 		case ".go":
-			goRoutes, err := parseGoFile(filename)
+			goRoutes, err := parseGoFile(base, filename)
 			if err != nil {
 				return nil, err
 			}
-			routes = slices.Concat(routes, goRoutes)
+			routes[filename] = goRoutes
 
 		case ".js":
-			routes = append(routes, parseJSFile(filename))
+			routes[filename] = []Route{parseJSFile(filename)}
 
 		case ".html":
-			routes = append(routes, parseHTMLFile(filename))
+			routes[filename] = []Route{parseHTMLFile(filename)}
 		}
 	}
 	return routes, nil
