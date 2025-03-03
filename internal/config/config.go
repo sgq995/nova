@@ -10,7 +10,7 @@ type Config struct {
 	Pages string // Route to pages dir
 }
 
-func defaultConfig() Config {
+func Default() Config {
 	return Config{
 		Pages: "src/pages",
 	}
@@ -57,7 +57,7 @@ func override(base Config, config Config) Config {
 }
 
 func Read(filename string) (Config, error) {
-	def := defaultConfig()
+	def := Default()
 
 	user, err := readConfigFile(filename)
 	if err != nil {
