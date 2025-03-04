@@ -7,27 +7,28 @@ import (
 )
 
 type Config struct {
-	Pages string // Route to pages dir
+	Router  RouterConfig
+	Codegen CodegenConfig
 }
 
 func Default() Config {
 	return Config{
-		Pages: "src/pages",
+		Router: defaultRouterConfig(),
 	}
+}
+
+func (c *Config) merge(other *Config) {
+	c.Router.merge(&other.Router)
 }
 
 type configFile struct {
-	Pages *string
+	Router  *routerConfigFile  `json:"router"`
+	Codegen *codegenConfigFile `json:"codegen"`
 }
 
-func transformConfigFile(f *configFile) Config {
-	pages := ""
-	if f.Pages != nil {
-		pages = *f.Pages
-	}
-
+func transformConfigFile(cf *configFile) Config {
 	return Config{
-		Pages: pages,
+		Router: transformRouterConfigFile(cf.Router),
 	}
 }
 
@@ -37,33 +38,25 @@ func readConfigFile(filename string) (Config, error) {
 		return Config{}, err
 	}
 
-	var f configFile
+	var cf configFile
 	buf := bytes.NewReader(b)
-	json.NewDecoder(buf).Decode(&f)
-
-	config := transformConfigFile(&f)
-
-	return config, nil
-}
-
-func override(base Config, config Config) Config {
-	var final Config = base
-
-	if config.Pages != "" {
-		final.Pages = config.Pages
-	}
-
-	return final
-}
-
-func Read(filename string) (Config, error) {
-	def := Default()
-
-	user, err := readConfigFile(filename)
+	err = json.NewDecoder(buf).Decode(&cf)
 	if err != nil {
 		return Config{}, err
 	}
 
-	config := override(def, user)
+	config := transformConfigFile(&cf)
+	return config, nil
+}
+
+func Read(filename string) (Config, error) {
+	cf, err := readConfigFile(filename)
+	if err != nil {
+		return Config{}, err
+	}
+
+	config := Default()
+	config.merge(&cf)
+
 	return config, nil
 }
