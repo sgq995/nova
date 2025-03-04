@@ -7,7 +7,7 @@ type Router struct {
 }
 
 func NewRouter(config config.RouterConfig, files []string) (*Router, error) {
-	routes, err := parse(config.Pages, files)
+	routes, err := parse(&config, files)
 	if err != nil {
 		return nil, err
 	}

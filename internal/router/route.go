@@ -19,3 +19,10 @@ type RestRouteGo struct {
 }
 
 func (r *RestRouteGo) route() {}
+
+type StaticRouteHTML struct {
+	Pattern  string
+	Filename string
+}
+
+func (r *StaticRouteHTML) route() {}

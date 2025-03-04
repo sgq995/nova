@@ -6,20 +6,30 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sgq995/nova/internal/config"
 	"github.com/sgq995/nova/internal/module"
 	"github.com/sgq995/nova/internal/parser"
 )
 
-func parseGoFile(base, filename string) ([]Route, error) {
+func parseGoFile(config *config.RouterConfig, filename string) ([]Route, error) {
 	handlers, err := parser.ParseRouteHandlersGo(filename)
 	if err != nil {
 		return nil, err
 	}
 
-	basepath := module.Abs(filepath.FromSlash(base))
+	pagespath := module.Abs(filepath.FromSlash(config.Pages))
+	basepath, _ := filepath.Rel(pagespath, filepath.Dir(filename))
 
-	routePath, _ := filepath.Rel(basepath, filepath.Dir(filename))
-	routePath = filepath.ToSlash(routePath)
+	templates, err := parser.ParseImportsGo(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range templates {
+		templates[i], _ = filepath.Rel(filepath.Dir(filename), templates[i])
+	}
+
+	routePath := filepath.ToSlash(basepath)
 	routePath = path.Clean("/" + routePath)
 	// TODO: config traling slashes
 	if strings.HasSuffix(routePath, "/") {
@@ -33,14 +43,13 @@ func parseGoFile(base, filename string) ([]Route, error) {
 		case "RENDER":
 			routes = append(routes, &RenderRouteGo{
 				Pattern:   "GET " + routePath,
-				Root:      routePath,
-				Templates: []string{},
+				Root:      basepath,
+				Templates: templates,
 				Handler:   h,
 			})
 
 		case http.MethodConnect, http.MethodDelete, http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodPatch, http.MethodPost, http.MethodPut, http.MethodTrace:
-			// TODO: config api base
-			routePath = path.Join("/api", routePath)
+			routePath = path.Join(config.APIBase, routePath)
 
 			routes = append(routes, &RestRouteGo{
 				Pattern: method + " " + routePath,
@@ -62,12 +71,12 @@ func parseHTMLFile(filename string) Route {
 	return nil
 }
 
-func parse(base string, files []string) (map[string][]Route, error) {
+func parse(config *config.RouterConfig, files []string) (map[string][]Route, error) {
 	routes := map[string][]Route{}
 	for _, filename := range files {
 		switch filepath.Ext(filename) {
 		case ".go":
-			goRoutes, err := parseGoFile(base, filename)
+			goRoutes, err := parseGoFile(config, filename)
 			if err != nil {
 				return nil, err
 			}
