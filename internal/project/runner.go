@@ -50,8 +50,9 @@ func (r *runner) start() error {
 }
 
 func (r *runner) stop() {
+	r.stdin.Close()
 	r.cmd.Process.Signal(os.Interrupt)
-	syscall.Kill(-r.cmd.SysProcAttr.Pgid, syscall.SIGINT)
+	syscall.Kill(-r.cmd.Process.Pid, syscall.SIGINT)
 	r.cmd.Wait()
 }
 
