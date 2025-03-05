@@ -6,8 +6,8 @@ type Router struct {
 	Routes map[string][]Route
 }
 
-func NewRouter(config config.RouterConfig, files []string) (*Router, error) {
-	routes, err := parse(&config, files)
+func NewRouter(c config.RouterConfig, files []string) (*Router, error) {
+	routes, err := parse(&c, files)
 	if err != nil {
 		return nil, err
 	}

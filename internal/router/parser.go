@@ -11,13 +11,13 @@ import (
 	"github.com/sgq995/nova/internal/parser"
 )
 
-func parseGoFile(config *config.RouterConfig, filename string) ([]Route, error) {
+func parseGoFile(c *config.RouterConfig, filename string) ([]Route, error) {
 	handlers, err := parser.ParseRouteHandlersGo(filename)
 	if err != nil {
 		return nil, err
 	}
 
-	pagespath := module.Abs(filepath.FromSlash(config.Pages))
+	pagespath := module.Abs(filepath.FromSlash(c.Pages))
 	basepath, _ := filepath.Rel(pagespath, filepath.Dir(filename))
 
 	templates, err := parser.ParseImportsGo(filename)
@@ -49,7 +49,7 @@ func parseGoFile(config *config.RouterConfig, filename string) ([]Route, error) 
 			})
 
 		case http.MethodConnect, http.MethodDelete, http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodPatch, http.MethodPost, http.MethodPut, http.MethodTrace:
-			routePath = path.Join(config.APIBase, routePath)
+			routePath = path.Join(c.APIBase, routePath)
 
 			routes = append(routes, &RestRouteGo{
 				Pattern: method + " " + routePath,
@@ -71,12 +71,12 @@ func parseHTMLFile(filename string) Route {
 	return nil
 }
 
-func parse(config *config.RouterConfig, files []string) (map[string][]Route, error) {
+func parse(c *config.RouterConfig, files []string) (map[string][]Route, error) {
 	routes := map[string][]Route{}
 	for _, filename := range files {
 		switch filepath.Ext(filename) {
 		case ".go":
-			goRoutes, err := parseGoFile(config, filename)
+			goRoutes, err := parseGoFile(c, filename)
 			if err != nil {
 				return nil, err
 			}
