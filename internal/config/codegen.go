@@ -10,12 +10,23 @@ func defaultCodegenConfig() CodegenConfig {
 	}
 }
 
-func (*CodegenConfig) merge(other *CodegenConfig) {
-
+func (cc *CodegenConfig) merge(other *CodegenConfig) {
+	if other.OutDir != "" {
+		cc.OutDir = other.OutDir
+	}
 }
 
-type codegenConfigFile struct{}
+type codegenConfigFile struct {
+	outDir *string
+}
 
 func transformCodegenConfigFile(ccf *codegenConfigFile) CodegenConfig {
-	return defaultCodegenConfig()
+	var outDir string
+	if ccf.outDir != nil {
+		outDir = *ccf.outDir
+	}
+
+	return CodegenConfig{
+		OutDir: outDir,
+	}
 }
