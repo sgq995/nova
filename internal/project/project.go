@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 
+	"github.com/sgq995/nova/internal/codegen"
 	"github.com/sgq995/nova/internal/config"
 	"github.com/sgq995/nova/internal/router"
 )
@@ -38,12 +39,19 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 
 	// files := Scan(pages)
 	// Link(files)
-	fs, err := scan(p.config.Pages)
+	fs, err := scan(p.config.Router.Pages)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = router.NewRouter(p.config.Pages, fs.pages)
+	// TODO: esbuild
+
+	r, err := router.NewRouter(p.config.Router, fs.pages)
+	if err != nil {
+		return nil, err
+	}
+
+	err = codegen.Generate(p.config, r)
 	if err != nil {
 		return nil, err
 	}
@@ -56,8 +64,6 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	// -> router := CreateRouter(files, WithProxy(proxyUrl))
 	// -> Execute(mainTemplate, router)
 	// -> Serve()
-
-	// p.scan(p.config.Pages)
 
 	return nil, nil
 }
