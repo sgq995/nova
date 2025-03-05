@@ -3,9 +3,11 @@ package project
 import (
 	"context"
 	"log"
+	"os"
 
 	"github.com/sgq995/nova/internal/codegen"
 	"github.com/sgq995/nova/internal/config"
+	"github.com/sgq995/nova/internal/esbuild"
 	"github.com/sgq995/nova/internal/router"
 )
 
@@ -36,9 +38,11 @@ type serverImpl struct {
 	router  *router.Router
 	codegen *codegen.Codegen
 	runner  *runner
+	esbuild esbuild.ESBuildContext
 }
 
 func (s *serverImpl) Dispose() {
+	s.esbuild.Dispose()
 	s.runner.stop()
 }
 
@@ -47,25 +51,42 @@ type projectContextImpl struct {
 }
 
 func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
+	os.Setenv("NOVA_ENV", "development")
+
 	scanner := newScanner(p.config)
-	// TODO: esbuild
+	esbuild := esbuild.NewESBuild(p.config)
 	router := router.NewRouter(p.config)
 	codegen := codegen.NewCodegen(p.config)
 	runner := newRunner(p.config)
 
-	// err := scanner.scan()
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// Generate(p.config, router.ParseRoutes(scanner.pages))
-	// if err != nil {
-	// 	return nil, err
-	// }
+	err := scanner.scan()
+	if err != nil {
+		return nil, err
+	}
+	routes, err := router.ParseRoutes(scanner.pages)
+	if err != nil {
+		return nil, err
+	}
+	err = codegen.Generate(routes)
+	if err != nil {
+		return nil, err
+	}
+
+	runner.create()
+	runner.start()
+
+	esbuildCtx := esbuild.Context(scanner.jsFiles)
+	server := &serverImpl{
+		scanner: scanner,
+		router:  router,
+		codegen: codegen,
+		runner:  runner,
+		esbuild: esbuildCtx,
+	}
 
 	watcher := newWatcher(ctx, map[string]func(string){
 		"*.go": func(filename string) {
 			runner.stop()
-			runner.create()
 
 			err := scanner.scan()
 			if err != nil {
@@ -80,14 +101,22 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 			err = codegen.Generate(routes)
 			if err != nil {
 				log.Println("[codegen]", err)
+				return
 			}
 			log.Println("[reload]", filename)
 
+			runner.create()
 			runner.start()
 		},
-		"*.js": func(s string) {
+		"*.js": func(filename string) {
 			// TODO: esbuild
 			// TODO: runner.update
+			files, err := server.esbuild.Build()
+			if err != nil {
+				log.Println("[esbuild]", err)
+				return
+			}
+			runner.update(filename, files[filename])
 		},
 	})
 
@@ -102,15 +131,12 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	// -> Execute(mainTemplate, router)
 	// -> Serve()
 
-	return &serverImpl{
-		scanner: scanner,
-		router:  router,
-		codegen: codegen,
-		runner:  runner,
-	}, nil
+	return server, nil
 }
 
 func (*projectContextImpl) Build() error {
+	os.Setenv("NOVA_ENV", "production")
+
 	// build
 	// files := Scan(c.Pages)
 	// link with file handlers,
