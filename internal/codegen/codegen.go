@@ -23,9 +23,13 @@ import (
 )
 
 func renderHandler(root string, templates []string, render func(*template.Template, http.ResponseWriter, *http.Request) error) http.Handler {
+	{{if .IsProd -}}
 	fs := os.DirFS(root)
+	t := template.Must(template.ParseFS(fs, templates...)){{end}}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t := template.Must(template.ParseFS(fs, templates...))
+		{{if not .IsProd -}}
+		fs := os.DirFS("{{.Root}}" + root)
+		t := template.Must(template.ParseFS(fs, templates...)){{end}}
 		err := render(t, w, r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -73,16 +77,16 @@ type handler struct {
 	Package string
 }
 
-func generateRouter(basepath string, r *router.Router) error {
+func generateRouter(outDir, pagespath string, r *router.Router) error {
 	t := template.Must(template.New("router.go").Parse(routerTmpl))
 
-	outDir := filepath.Join(basepath, "router")
-	err := os.MkdirAll(outDir, 0755)
+	routerDir := filepath.Join(outDir, "router")
+	err := os.MkdirAll(routerDir, 0755)
 	if err != nil {
 		return err
 	}
 
-	out := filepath.Join(basepath, "router", "router.go")
+	out := filepath.Join(routerDir, "router.go")
 	file, err := os.Create(out)
 	if err != nil {
 		return err
@@ -117,15 +121,19 @@ func generateRouter(basepath string, r *router.Router) error {
 	}
 
 	return t.Execute(file, map[string]any{
+		"IsProd":   os.Getenv("NOVA_ENV") == "production",
 		"Imports":  imports,
+		"Root":     filepath.ToSlash(pagespath + "/"),
 		"Handlers": handlers,
 	})
 }
 
-func generateMain(basepath string) error {
+func generateMain(outDir string) error {
 	t := template.Must(template.New("main.go").Parse(mainTmpl))
 
-	out := filepath.Join(basepath, "main.go")
+	routerpath, _ := filepath.Rel(module.Root(), filepath.Join(outDir, "router"))
+
+	out := filepath.Join(outDir, "main.go")
 	file, err := os.Create(out)
 	if err != nil {
 		return err
@@ -134,20 +142,20 @@ func generateMain(basepath string) error {
 
 	return t.Execute(file, map[string]any{
 		"Module": module.ModuleName(),
-		"Router": path.Join(basepath, "router"),
+		"Router": routerpath,
 		"Host":   "",
 		"Port":   "8080",
 	})
 }
 
-func Generate(config config.CodegenConfig, router *router.Router) error {
-	outDir := filepath.Join(module.Root(), ".nova")
+func Generate(c *config.CodegenConfig, pagespath string, router *router.Router) error {
+	outDir := filepath.Join(module.Root(), c.OutDir)
 	err := os.MkdirAll(outDir, 0755)
 	if err != nil {
 		return err
 	}
 
-	err = generateRouter(outDir, router)
+	err = generateRouter(outDir, pagespath, router)
 	if err != nil {
 		return err
 	}
