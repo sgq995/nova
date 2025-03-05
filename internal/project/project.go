@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"log"
 
 	"github.com/sgq995/nova/internal/codegen"
 	"github.com/sgq995/nova/internal/config"
@@ -39,14 +40,15 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 
 	// files := Scan(pages)
 	// Link(files)
-	fs, err := scan(p.config.Router.Pages)
+	scanner := newScanner()
+	err := scanner.scan(p.config.Router.Pages)
 	if err != nil {
 		return nil, err
 	}
 
 	// TODO: esbuild
 
-	r, err := router.NewRouter(p.config.Router, fs.pages)
+	r, err := router.NewRouter(p.config, scanner.pages)
 	if err != nil {
 		return nil, err
 	}
@@ -55,6 +57,31 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	watcher := newWatcher(ctx, map[string]func(string){
+		"*.go": func(filename string) {
+			err := scanner.scan(p.config.Router.Pages)
+			if err != nil {
+				log.Println("[scanner]", err)
+				return
+			}
+			r, err := router.NewRouter(p.config, scanner.pages)
+			if err != nil {
+				log.Println("[router]", err)
+				return
+			}
+			err = codegen.Generate(p.config, r)
+			if err != nil {
+				log.Println("[codegen]", err)
+			}
+			log.Println("[reload]", filename)
+		},
+		"*.js": func(s string) {
+			// TODO: esbuild
+		},
+	})
+
+	go watcher.watch(p.config.Router.Pages)
 
 	// proxyUrl := BundlerServe(files)
 	// Watch()

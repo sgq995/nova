@@ -10,7 +10,7 @@ import (
 	"github.com/sgq995/nova/internal/parser"
 )
 
-type fileScanner struct {
+type scanner struct {
 	goFiles    []string
 	jsFiles    []string
 	htmlFiles  []string
@@ -21,28 +21,30 @@ type fileScanner struct {
 	pages []string
 }
 
-func scan(base string) (*fileScanner, error) {
-	fs := &fileScanner{linkedFiles: make(map[string][]string)}
-
-	err := fs.findFiles(base)
-	if err != nil {
-		return nil, err
-	}
-
-	err = fs.linkFiles()
-	if err != nil {
-		return nil, err
-	}
-
-	err = fs.findPageFiles()
-	if err != nil {
-		return nil, err
-	}
-
-	return fs, nil
+func newScanner() *scanner {
+	return &scanner{linkedFiles: make(map[string][]string)}
 }
 
-func (p *fileScanner) findFiles(base string) error {
+func (p *scanner) scan(base string) error {
+	err := p.findFiles(base)
+	if err != nil {
+		return err
+	}
+
+	err = p.linkFiles()
+	if err != nil {
+		return err
+	}
+
+	err = p.findPageFiles()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *scanner) findFiles(base string) error {
 	pages := module.Abs(filepath.FromSlash(base))
 
 	err := filepath.WalkDir(pages, func(path string, d fs.DirEntry, err error) error {
@@ -77,7 +79,7 @@ func (p *fileScanner) findFiles(base string) error {
 	return nil
 }
 
-func (p *fileScanner) linkFiles() error {
+func (p *scanner) linkFiles() error {
 	for _, filename := range p.goFiles {
 		imports, err := parser.ParseImportsGo(filename)
 		if err != nil {
@@ -97,7 +99,7 @@ func (p *fileScanner) linkFiles() error {
 	return nil
 }
 
-func (p *fileScanner) findPageFiles() error {
+func (p *scanner) findPageFiles() error {
 	p.pages = append(p.pages, p.goFiles...)
 
 	type void struct{}
