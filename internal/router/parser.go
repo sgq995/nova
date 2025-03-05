@@ -71,12 +71,12 @@ func parseHTMLFile(filename string) Route {
 	return nil
 }
 
-func parse(c *config.RouterConfig, files []string) (map[string][]Route, error) {
+func parse(c *config.Config, files []string) (map[string][]Route, error) {
 	routes := map[string][]Route{}
 	for _, filename := range files {
 		switch filepath.Ext(filename) {
 		case ".go":
-			goRoutes, err := parseGoFile(c, filename)
+			goRoutes, err := parseGoFile(&c.Router, filename)
 			if err != nil {
 				return nil, err
 			}
