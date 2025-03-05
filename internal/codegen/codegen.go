@@ -12,9 +12,10 @@ import (
 	"github.com/sgq995/nova/internal/router"
 )
 
-const routerTmpl string = `package router
+const mainTmpl string = `package main
 
 import (
+	"log"
 	"html/template"
 	"net/http"
 	"os"
@@ -37,32 +38,16 @@ func renderHandler(root string, templates []string, render func(*template.Templa
 	})
 }
 
-func NewRouter() http.Handler {
+func main() {
 	mux := http.NewServeMux()
 	{{range $filename, $handler := .Handlers}}
 	// {{$filename}}
 	{{with $render := $handler.Render}}mux.Handle("{{$render.Pattern}}", renderHandler("{{$render.Root}}", []string{ {{- range $render.Templates}}"{{.}}", {{end -}} }, {{$handler.Package}}.{{$render.Handler}})){{end}}
 	{{range $handler.Rest}}mux.HandleFunc("{{.Pattern}}", {{$handler.Package}}.{{.Handler}}){{end}}
 	{{end}}
-	return mux
-}
-`
-
-const mainTmpl string = `package main
-
-import (
-	"log"
-	"net/http"
-
-	"{{.Module}}/{{.Router}}"
-)
-
-func main() {
-	r := router.NewRouter()
-
 	s := http.Server{
 		Addr:    "{{.Host}}:{{.Port}}",
-		Handler: r,
+		Handler: mux,
 	}
 	err := s.ListenAndServe()
 	if err != http.ErrServerClosed {
@@ -77,16 +62,11 @@ type handler struct {
 	Package string
 }
 
-func generateRouter(outDir, pagespath string, r *router.Router) error {
-	t := template.Must(template.New("router.go").Parse(routerTmpl))
+func generateMain(c *config.Config, r *router.Router) error {
+	t := template.Must(template.New("main.go").Parse(mainTmpl))
 
-	routerDir := filepath.Join(outDir, "router")
-	err := os.MkdirAll(routerDir, 0755)
-	if err != nil {
-		return err
-	}
-
-	out := filepath.Join(routerDir, "router.go")
+	outDir := filepath.Join(module.Root(), c.Codegen.OutDir)
+	out := filepath.Join(outDir, "main.go")
 	file, err := os.Create(out)
 	if err != nil {
 		return err
@@ -120,47 +100,27 @@ func generateRouter(outDir, pagespath string, r *router.Router) error {
 		handlers[filename] = h
 	}
 
+	isProd := os.Getenv("NOVA_ENV") == "production"
+	pagespath := module.Abs(filepath.FromSlash(c.Router.Pages)) + "/"
+
 	return t.Execute(file, map[string]any{
-		"IsProd":   os.Getenv("NOVA_ENV") == "production",
+		"IsProd":   isProd,
 		"Imports":  imports,
-		"Root":     filepath.ToSlash(pagespath + "/"),
+		"Root":     pagespath,
 		"Handlers": handlers,
+		"Host":     c.Server.Host,
+		"Port":     c.Server.Port,
 	})
 }
 
-func generateMain(outDir string) error {
-	t := template.Must(template.New("main.go").Parse(mainTmpl))
-
-	routerpath, _ := filepath.Rel(module.Root(), filepath.Join(outDir, "router"))
-
-	out := filepath.Join(outDir, "main.go")
-	file, err := os.Create(out)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	return t.Execute(file, map[string]any{
-		"Module": module.ModuleName(),
-		"Router": routerpath,
-		"Host":   "",
-		"Port":   "8080",
-	})
-}
-
-func Generate(c *config.CodegenConfig, pagespath string, router *router.Router) error {
-	outDir := filepath.Join(module.Root(), c.OutDir)
+func Generate(c *config.Config, r *router.Router) error {
+	outDir := filepath.Join(module.Root(), c.Codegen.OutDir)
 	err := os.MkdirAll(outDir, 0755)
 	if err != nil {
 		return err
 	}
 
-	err = generateRouter(outDir, pagespath, router)
-	if err != nil {
-		return err
-	}
-
-	err = generateMain(outDir)
+	err = generateMain(c, r)
 	if err != nil {
 		return err
 	}
