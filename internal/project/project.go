@@ -31,53 +31,63 @@ func Context(c config.Config) (ProjectContext, error) {
 	return &projectContextImpl{config: &c}, nil
 }
 
+type serverImpl struct {
+	scanner *scanner
+	router  *router.Router
+	codegen *codegen.Codegen
+	runner  *runner
+}
+
+func (s *serverImpl) Dispose() {
+	s.runner.stop()
+}
+
 type projectContextImpl struct {
 	config *config.Config
 }
 
 func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
-	// dev
-
-	// files := Scan(pages)
-	// Link(files)
-	scanner := newScanner()
-	err := scanner.scan(p.config.Router.Pages)
-	if err != nil {
-		return nil, err
-	}
-
+	scanner := newScanner(p.config)
 	// TODO: esbuild
+	router := router.NewRouter(p.config)
+	codegen := codegen.NewCodegen(p.config)
+	runner := newRunner(p.config)
 
-	r, err := router.NewRouter(p.config, scanner.pages)
-	if err != nil {
-		return nil, err
-	}
-
-	err = codegen.Generate(p.config, r)
-	if err != nil {
-		return nil, err
-	}
+	// err := scanner.scan()
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// Generate(p.config, router.ParseRoutes(scanner.pages))
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	watcher := newWatcher(ctx, map[string]func(string){
 		"*.go": func(filename string) {
-			err := scanner.scan(p.config.Router.Pages)
+			runner.stop()
+			runner.create()
+
+			err := scanner.scan()
 			if err != nil {
 				log.Println("[scanner]", err)
 				return
 			}
-			r, err := router.NewRouter(p.config, scanner.pages)
+			routes, err := router.ParseRoutes(scanner.pages)
 			if err != nil {
 				log.Println("[router]", err)
 				return
 			}
-			err = codegen.Generate(p.config, r)
+			err = codegen.Generate(routes)
 			if err != nil {
 				log.Println("[codegen]", err)
 			}
 			log.Println("[reload]", filename)
+
+			runner.start()
 		},
 		"*.js": func(s string) {
 			// TODO: esbuild
+			// TODO: runner.update
 		},
 	})
 
@@ -92,7 +102,12 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	// -> Execute(mainTemplate, router)
 	// -> Serve()
 
-	return nil, nil
+	return &serverImpl{
+		scanner: scanner,
+		router:  router,
+		codegen: codegen,
+		runner:  runner,
+	}, nil
 }
 
 func (*projectContextImpl) Build() error {

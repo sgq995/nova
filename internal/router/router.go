@@ -3,13 +3,17 @@ package router
 import "github.com/sgq995/nova/internal/config"
 
 type Router struct {
-	Routes map[string][]Route
+	config *config.Config
 }
 
-func NewRouter(c *config.Config, files []string) (*Router, error) {
-	routes, err := parse(c, files)
+func NewRouter(c *config.Config) *Router {
+	return &Router{config: c}
+}
+
+func (r *Router) ParseRoutes(files []string) (map[string][]Route, error) {
+	routes, err := parse(r.config, files)
 	if err != nil {
 		return nil, err
 	}
-	return &Router{Routes: routes}, nil
+	return routes, nil
 }

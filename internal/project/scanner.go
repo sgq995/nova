@@ -6,11 +6,14 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/sgq995/nova/internal/config"
 	"github.com/sgq995/nova/internal/module"
 	"github.com/sgq995/nova/internal/parser"
 )
 
 type scanner struct {
+	config *config.Config
+
 	goFiles    []string
 	jsFiles    []string
 	htmlFiles  []string
@@ -21,12 +24,15 @@ type scanner struct {
 	pages []string
 }
 
-func newScanner() *scanner {
-	return &scanner{linkedFiles: make(map[string][]string)}
+func newScanner(c *config.Config) *scanner {
+	return &scanner{
+		config:      c,
+		linkedFiles: make(map[string][]string),
+	}
 }
 
-func (p *scanner) scan(base string) error {
-	err := p.findFiles(base)
+func (p *scanner) scan() error {
+	err := p.findFiles(p.config.Router.Pages)
 	if err != nil {
 		return err
 	}

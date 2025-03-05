@@ -62,7 +62,7 @@ type handler struct {
 	Package string
 }
 
-func generateMain(c *config.Config, r *router.Router) error {
+func generateMain(c *config.Config, routes map[string][]router.Route) error {
 	t := template.Must(template.New("main.go").Parse(mainTmpl))
 
 	outDir := filepath.Join(module.Root(), c.Codegen.OutDir)
@@ -75,7 +75,7 @@ func generateMain(c *config.Config, r *router.Router) error {
 
 	imports := map[string]string{}
 	handlers := map[string]handler{}
-	for filename, routes := range r.Routes {
+	for filename, routes := range routes {
 		base, _ := filepath.Rel(module.Root(), filepath.Dir(filename))
 		base = filepath.ToSlash(base)
 		alias := strings.ReplaceAll(base, "/", "")
@@ -113,14 +113,22 @@ func generateMain(c *config.Config, r *router.Router) error {
 	})
 }
 
-func Generate(c *config.Config, r *router.Router) error {
-	outDir := filepath.Join(module.Root(), c.Codegen.OutDir)
+type Codegen struct {
+	config *config.Config
+}
+
+func NewCodegen(c *config.Config) *Codegen {
+	return &Codegen{config: c}
+}
+
+func (c *Codegen) Generate(routes map[string][]router.Route) error {
+	outDir := filepath.Join(module.Root(), c.config.Codegen.OutDir)
 	err := os.MkdirAll(outDir, 0755)
 	if err != nil {
 		return err
 	}
 
-	err = generateMain(c, r)
+	err = generateMain(c.config, routes)
 	if err != nil {
 		return err
 	}
