@@ -2,7 +2,6 @@ package project
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -124,15 +123,15 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 		},
 		"*.js": func(name string) {
 			root := module.Abs(p.config.Router.Pages)
-			name, _ = filepath.Rel(root, name)
-			filename := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static", name))
+			in, _ := filepath.Rel(root, name)
+			out := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static", in))
 			files, err := server.esbuild.Build()
 			if err != nil {
 				log.Println("[esbuild]", err)
 				return
 			}
-			fmt.Println("filename", filename)
-			runner.update(name, files[filename])
+			log.Println("[reload]", name)
+			runner.update(in, files[out])
 		},
 	})
 
