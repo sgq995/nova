@@ -71,7 +71,7 @@ func (w *watcher) watch(dir string) {
 			log.Fatalln(err)
 		}
 
-		time.Sleep(1 * time.Second)
+		time.Sleep(2 * time.Second)
 
 		select {
 		case <-w.ctx.Done():

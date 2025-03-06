@@ -60,7 +60,7 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 		Format:      api.FormatESModule,
 		Bundle:      true,
 		Splitting:   true,
-		Sourcemap:   api.SourceMapLinked,
+		Sourcemap:   api.SourceMapInline,
 		Plugins: []api.Plugin{
 			{
 				Name: "nova-node_modules",
