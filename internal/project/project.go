@@ -134,8 +134,10 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 				name, _ := filepath.Rel(root, filename)
 				runner.update(name, contents)
 			}
+
+			runner.update(filename, "")
 		},
-		"*.js": func(name string) {
+		"*.js,*.jsx,*.ts,*.tsx": func(name string) {
 			root := module.Abs(p.config.Router.Pages)
 			in, _ := filepath.Rel(root, name)
 			out := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static", in))
@@ -146,6 +148,10 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 			}
 			log.Println("[reload]", name)
 			runner.update(in, files[out])
+		},
+		"*.html": func(name string) {
+			log.Println("[reload]", name)
+			runner.update(name, "")
 		},
 	})
 

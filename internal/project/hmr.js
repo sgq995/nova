@@ -16,7 +16,7 @@
       );
       if (script) {
         const next = document.createElement('script');
-        next.type = "module";
+        next.type = 'module';
         next.src = script.src.split('?')[0] + '?' + Date.now();
         next.onload = () => {
           console.log(`[reloaded] ${file}`);
@@ -47,8 +47,16 @@
     const { added, removed, updated } = JSON.parse(event.data);
 
     console.log('[hmr]', { added }, { removed }, { updated });
-    updateJS(updated.filter((file) => file.endsWith('.js')));
-    updateCSS(updated.filter((file) => file.endsWith('.css')));
+    if (
+      updated.some((file) => file.endsWith('.go') || file.endsWith('.html'))
+    ) {
+      // Hot Reloading
+      location.reload();
+    } else {
+      // Hot Module Replacement
+      updateJS(updated.filter((file) => file.endsWith('.js')));
+      updateCSS(updated.filter((file) => file.endsWith('.css')));
+    }
 
     // TODO: verify conditions for location.reload
     // if (jsFiles.length > 0) {

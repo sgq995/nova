@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"log"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/sgq995/nova/internal/module"
@@ -40,9 +41,12 @@ func (w *watcher) watch(dir string) {
 
 			name := filepath.Base(path)
 			matches := []string{}
-			for pattern := range w.callbacks {
-				if matched := utils.Must(filepath.Match(pattern, name)); matched {
-					matches = append(matches, pattern)
+			for matcher := range w.callbacks {
+				patterns := strings.Split(matcher, ",")
+				for _, pattern := range patterns {
+					if matched := utils.Must(filepath.Match(pattern, name)); matched {
+						matches = append(matches, matcher)
+					}
 				}
 			}
 
@@ -57,8 +61,8 @@ func (w *watcher) watch(dir string) {
 
 			modTime := info.ModTime()
 			if lastModTime, exists := w.fileInfo[path]; exists && modTime.After(lastModTime) {
-				for _, pattern := range matches {
-					cb := w.callbacks[pattern]
+				for _, matcher := range matches {
+					cb := w.callbacks[matcher]
 					cb(path)
 				}
 			}
@@ -71,7 +75,7 @@ func (w *watcher) watch(dir string) {
 			log.Fatalln(err)
 		}
 
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 
 		select {
 		case <-w.ctx.Done():
