@@ -35,7 +35,6 @@ type esbuildFS struct {
 }
 
 func (fsys *esbuildFS) Open(name string) (fs.File, error) {
-	log.Println("[main.go]", name, fsys.files)
 	if f, exists := fsys.files[name]; exists {
 		return &esbuildFile{
 			name:     name,
@@ -118,14 +117,12 @@ func esbuildScanner(fsys *esbuildFS) {
 		if err != nil {
 			panic(err)
 		}
-		log.Println("[main.go]", command, filename, length)
 
 		contents := make([]byte, length)
-		read, err := io.ReadFull(reader, contents)
+		_, err = io.ReadFull(reader, contents)
 		if err != nil {
 			panic(err)
 		}
-		log.Println("[main.go]", read, contents)
 
 		switch command {
 		case "UPDATE":
