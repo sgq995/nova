@@ -66,18 +66,19 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	codegen := codegen.NewCodegen(p.config)
 	runner := newRunner(p.config)
 
-	err := scanner.scan()
-	if err != nil {
-		return nil, err
-	}
-	routes, err := router.ParseRoutes(scanner.pages)
-	if err != nil {
-		return nil, err
-	}
-	err = codegen.Generate(routes)
-	if err != nil {
-		return nil, err
-	}
+	// err := scanner.scan()
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// routes, err := router.ParseRoutes(scanner.pages)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// err = codegen.Generate(routes)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	rebuild(scanner, router, codegen)
 
 	runner.create()
 	runner.start()
@@ -109,21 +110,22 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 		"*.go": func(filename string) {
 			runner.stop()
 
-			err := scanner.scan()
-			if err != nil {
-				log.Println("[scanner]", err)
-				return
-			}
-			routes, err := router.ParseRoutes(scanner.pages)
-			if err != nil {
-				log.Println("[router]", err)
-				return
-			}
-			err = codegen.Generate(routes)
-			if err != nil {
-				log.Println("[codegen]", err)
-				return
-			}
+			// err := scanner.scan()
+			// if err != nil {
+			// 	log.Println("[scanner]", err)
+			// 	return
+			// }
+			// routes, err := router.ParseRoutes(scanner.pages)
+			// if err != nil {
+			// 	log.Println("[router]", err)
+			// 	return
+			// }
+			// err = codegen.Generate(routes)
+			// if err != nil {
+			// 	log.Println("[codegen]", err)
+			// 	return
+			// }
+			rebuild(server.scanner, server.router, server.codegen)
 			log.Println("[reload]", filename)
 
 			runner.create()
@@ -190,8 +192,19 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	return server, nil
 }
 
-func (*projectContextImpl) Build() error {
+func (p *projectContextImpl) Build() error {
 	os.Setenv("NOVA_ENV", "production")
+
+	scanner := newScanner(p.config)
+	esbuild := esbuild.NewESBuild(p.config)
+	router := router.NewRouter(p.config)
+	codegen := codegen.NewCodegen(p.config)
+	runner := newRunner(p.config)
+
+	err := rebuild(scanner, router, codegen)
+	if err != nil {
+		return err
+	}
 
 	// build
 	// files := Scan(c.Pages)
@@ -205,5 +218,21 @@ func (*projectContextImpl) Build() error {
 	// Execute(mainTemplate)
 	// Build()
 
+	return nil
+}
+
+func rebuild(s *scanner, r *router.Router, c *codegen.Codegen) error {
+	err := s.scan()
+	if err != nil {
+		return err
+	}
+	routes, err := r.ParseRoutes(s.pages)
+	if err != nil {
+		return err
+	}
+	err = c.Generate(routes)
+	if err != nil {
+		return err
+	}
 	return nil
 }
