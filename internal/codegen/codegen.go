@@ -1,11 +1,11 @@
 package codegen
 
 import (
-	"html/template"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+	"text/template"
 
 	"github.com/sgq995/nova/internal/config"
 	"github.com/sgq995/nova/internal/module"
@@ -15,13 +15,125 @@ import (
 const mainTmpl string = `package main
 
 import (
-	"log"
+	"bufio"
 	"html/template"
+	"io"
+	"io/fs"
+	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 	{{range $alias, $package := .Imports}}
 	{{$alias}} "{{$package}}"{{end}}
 )
+
+{{if not .IsProd}}
+type esbuildFS struct {
+	files map[string][]byte
+}
+
+func (fsys *esbuildFS) Open(name string) (fs.File, error) {
+	log.Println("[main.go]", name, fsys.files)
+	if f, exists := fsys.files[name]; exists {
+		return &esbuildFile{
+			name:     name,
+			size:     int64(len(f)),
+			contents: f,
+		}, nil
+	}
+	return nil, fs.ErrNotExist
+}
+
+type esbuildFile struct {
+	name     string
+	size     int64
+	contents []byte
+}
+
+func (f *esbuildFile) Stat() (fs.FileInfo, error) {
+	return &esbuildFileInfo{
+		name: f.name,
+		size: f.size,
+	}, nil
+}
+
+func (f *esbuildFile) Read(out []byte) (int, error) {
+	n := copy(out, f.contents)
+	f.contents = f.contents[n:]
+	return n, nil
+}
+
+func (f *esbuildFile) Close() error {
+	return nil
+}
+
+type esbuildFileInfo struct {
+	name string
+	size int64
+}
+
+func (fi *esbuildFileInfo) Name() string {
+	return fi.name
+}
+
+func (fi *esbuildFileInfo) Size() int64 {
+	return fi.size
+}
+
+func (fi *esbuildFileInfo) Mode() fs.FileMode {
+	return 0755
+}
+
+func (fi *esbuildFileInfo) ModTime() time.Time {
+	return time.Now()
+}
+
+func (fi *esbuildFileInfo) IsDir() bool {
+	return false
+}
+
+func (fi *esbuildFileInfo) Sys() any {
+	return nil
+}
+
+func esbuildScanner(fsys *esbuildFS) {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			panic(err)
+		}
+		line = strings.TrimSpace(line)
+
+		parts := strings.Split(line, " ")
+		if len(parts) != 3 {
+			panic("[main.go] wrong format " + line)
+		}
+
+		command := parts[0]
+		filename := parts[1]
+		length, err := strconv.Atoi(parts[2])
+		if err != nil {
+			panic(err)
+		}
+		log.Println("[main.go]", command, filename, length)
+
+		contents := make([]byte, length)
+		read, err := io.ReadFull(reader, contents)
+		if err != nil {
+			panic(err)
+		}
+		log.Println("[main.go]", read, contents)
+
+		switch command {
+		case "UPDATE":
+			fsys.files[filename] = contents
+		}
+	}
+}
+{{end}}
 
 func renderHandler(root string, templates []string, render func(*template.Template, http.ResponseWriter, *http.Request) error) http.Handler {
 	{{if .IsProd -}}
@@ -44,6 +156,12 @@ func main() {
 	// {{$filename}}
 	{{with $render := $handler.Render}}mux.Handle("{{$render.Pattern}}", renderHandler("{{$render.Root}}", []string{ {{- range $render.Templates}}"{{.}}", {{end -}} }, {{$handler.Package}}.{{$render.Handler}})){{end}}
 	{{range $handler.Rest}}mux.HandleFunc("{{.Pattern}}", {{$handler.Package}}.{{.Handler}}){{end}}
+	{{end}}
+	{{if not .IsProd}}
+	fsys := &esbuildFS{files: make(map[string][]byte)}
+	go esbuildScanner(fsys)
+	mux.Handle("/", http.FileServerFS(fsys))
+	mux.Handle("/@node_modules/", http.StripPrefix("/@node_modules", http.FileServer(http.Dir("{{.NodeModules}}"))))
 	{{end}}
 	s := http.Server{
 		Addr:    "{{.Host}}:{{.Port}}",
@@ -104,12 +222,13 @@ func generateMain(c *config.Config, routes map[string][]router.Route) error {
 	pagespath := module.Abs(filepath.FromSlash(c.Router.Pages)) + "/"
 
 	return t.Execute(file, map[string]any{
-		"IsProd":   isProd,
-		"Imports":  imports,
-		"Root":     pagespath,
-		"Handlers": handlers,
-		"Host":     c.Server.Host,
-		"Port":     c.Server.Port,
+		"IsProd":      isProd,
+		"Imports":     imports,
+		"Root":        pagespath,
+		"Handlers":    handlers,
+		"Host":        c.Server.Host,
+		"Port":        c.Server.Port,
+		"NodeModules": module.Abs(filepath.Join("node_modules", ".nova")),
 	})
 }
 
