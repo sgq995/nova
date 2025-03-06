@@ -16,6 +16,7 @@ type scanner struct {
 
 	goFiles    []string
 	jsFiles    []string
+	cssFiles   []string
 	htmlFiles  []string
 	assetFiles []string
 
@@ -68,6 +69,9 @@ func (p *scanner) findFiles(base string) error {
 
 		case ".js", ".mjs", ".jsx", ".mjsx", ".ts", ".tsx":
 			p.jsFiles = append(p.jsFiles, path)
+
+		case ".css":
+			p.cssFiles = append(p.cssFiles, path)
 
 		case ".html":
 			p.htmlFiles = append(p.htmlFiles, path)

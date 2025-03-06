@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/sgq995/nova/internal/codegen"
 	"github.com/sgq995/nova/internal/config"
@@ -81,7 +82,8 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	runner.create()
 	runner.start()
 
-	esbuildCtx := esbuild.Context(scanner.jsFiles)
+	static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
+	esbuildCtx := esbuild.Context(static)
 	server := &serverImpl{
 		scanner: scanner,
 		router:  router,
@@ -137,7 +139,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 
 			runner.update(filename, "")
 		},
-		"*.js,*.jsx,*.ts,*.tsx": func(name string) {
+		"*.js,*.jsx,*.ts,*.tsx,*.css": func(name string) {
 			root := module.Abs(p.config.Router.Pages)
 			in, _ := filepath.Rel(root, name)
 			out := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static", in))
