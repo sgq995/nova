@@ -143,14 +143,32 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 			root := module.Abs(p.config.Router.Pages)
 			in, _ := filepath.Rel(root, name)
 			out := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static", in))
-			// TODO: check exists or restart esbuild to include file
 			files, err := server.esbuild.Build()
 			if err != nil {
 				log.Println("[esbuild]", err)
 				return
 			}
-			log.Println("[reload]", name)
-			runner.update(in, files[out])
+			if contents, exists := files[out]; exists {
+				log.Println("[reload]", name)
+				runner.update(in, contents)
+			} else {
+				server.esbuild.Dispose()
+
+				err := scanner.scan()
+				if err != nil {
+					log.Println("[scanner]", err)
+					return
+				}
+
+				static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
+				server.esbuild = esbuild.Context(static)
+				files, err := server.esbuild.Build()
+				if err != nil {
+					log.Println("[esbuild]", err)
+					return
+				}
+				runner.update(in, files[out])
+			}
 		},
 		"*.html": func(name string) {
 			log.Println("[reload]", name)
