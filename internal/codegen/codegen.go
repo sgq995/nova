@@ -190,7 +190,7 @@ func main() {
 	{{range $handler.Rest}}mux.HandleFunc("{{.Pattern}}", {{$handler.Package}}.{{.Handler}}){{end}}
 	{{end}}
 	{{if not .IsProd}}
-	ch := make(chan string)
+	ch := make(chan string, 16)
 	fsys := &esbuildFS{files: make(map[string][]byte)}
 	go esbuildScanner(fsys, ch)
 	mux.Handle("/", http.FileServerFS(fsys))

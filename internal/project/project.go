@@ -129,6 +129,8 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 			runner.create()
 			runner.start()
 
+			runner.update(filename, "")
+
 			runner.update("@nova/hmr.js", hmr)
 
 			root := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static"))
@@ -136,13 +138,12 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 				name, _ := filepath.Rel(root, filename)
 				runner.update(name, contents)
 			}
-
-			runner.update(filename, "")
 		},
 		"*.js,*.jsx,*.ts,*.tsx,*.css": func(name string) {
 			root := module.Abs(p.config.Router.Pages)
 			in, _ := filepath.Rel(root, name)
 			out := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static", in))
+			// TODO: check exists or restart esbuild to include file
 			files, err := server.esbuild.Build()
 			if err != nil {
 				log.Println("[esbuild]", err)
