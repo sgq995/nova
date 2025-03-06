@@ -2,12 +2,15 @@ package project
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/sgq995/nova/internal/codegen"
 	"github.com/sgq995/nova/internal/config"
 	"github.com/sgq995/nova/internal/esbuild"
+	"github.com/sgq995/nova/internal/module"
 	"github.com/sgq995/nova/internal/router"
 )
 
@@ -108,15 +111,17 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 			runner.create()
 			runner.start()
 		},
-		"*.js": func(filename string) {
-			// TODO: esbuild
-			// TODO: runner.update
+		"*.js": func(name string) {
+			root := module.Abs(p.config.Router.Pages)
+			name, _ = filepath.Rel(root, name)
+			filename := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static", name))
 			files, err := server.esbuild.Build()
 			if err != nil {
 				log.Println("[esbuild]", err)
 				return
 			}
-			runner.update(filename, files[filename])
+			fmt.Println("filename", filename)
+			runner.update(name, files[filename])
 		},
 	})
 

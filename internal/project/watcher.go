@@ -38,10 +38,10 @@ func (w *watcher) watch(dir string) {
 				return nil
 			}
 
-			filename := filepath.Base(path)
+			name := filepath.Base(path)
 			matches := []string{}
 			for pattern := range w.callbacks {
-				if matched := utils.Must(filepath.Match(pattern, filename)); matched {
+				if matched := utils.Must(filepath.Match(pattern, name)); matched {
 					matches = append(matches, pattern)
 				}
 			}
@@ -59,7 +59,7 @@ func (w *watcher) watch(dir string) {
 			if lastModTime, exists := w.fileInfo[path]; exists && modTime.After(lastModTime) {
 				for _, pattern := range matches {
 					cb := w.callbacks[pattern]
-					cb(filename)
+					cb(path)
 				}
 			}
 			w.fileInfo[path] = modTime
