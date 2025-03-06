@@ -25,36 +25,41 @@ func newRunner(c *config.Config) *runner {
 	return &runner{config: c}
 }
 
-func (r *runner) create() error {
+func (r *runner) start() error {
 	main := filepath.Join(module.Root(), r.config.Codegen.OutDir, "main.go")
 	cmd := exec.Command("go", "run", main)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return err
 	}
+
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	r.cmd = cmd
 	r.stdin = stdin
 
-	return nil
-}
-
-func (r *runner) start() error {
-	err := r.cmd.Start()
+	err = r.cmd.Start()
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
 func (r *runner) stop() {
 	r.stdin.Close()
+
 	r.cmd.Process.Signal(os.Interrupt)
 	syscall.Kill(-r.cmd.Process.Pid, syscall.SIGINT)
 	r.cmd.Wait()
+}
+
+func (r *runner) restart() {
+	r.stop()
+	r.start()
 }
 
 func (r *runner) update(filename, contents string) error {

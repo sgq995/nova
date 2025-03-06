@@ -66,22 +66,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	codegen := codegen.NewCodegen(p.config)
 	runner := newRunner(p.config)
 
-	// err := scanner.scan()
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// routes, err := router.ParseRoutes(scanner.pages)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// err = codegen.Generate(routes)
-	// if err != nil {
-	// 	return nil, err
-	// }
 	rebuild(scanner, router, codegen)
-
-	runner.create()
-	runner.start()
 
 	static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
 	esbuildCtx := esbuild.Context(static)
@@ -98,8 +83,9 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 		return nil, err
 	}
 
-	runner.update("@nova/hmr.js", hmr)
+	runner.start()
 
+	runner.update("@nova/hmr.js", hmr)
 	root := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static"))
 	for filename, contents := range files {
 		name, _ := filepath.Rel(root, filename)
@@ -108,38 +94,19 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 
 	watcher := newWatcher(ctx, map[string]func(string){
 		"*.go": func(filename string) {
-			runner.stop()
-
-			// err := scanner.scan()
-			// if err != nil {
-			// 	log.Println("[scanner]", err)
-			// 	return
-			// }
-			// routes, err := router.ParseRoutes(scanner.pages)
-			// if err != nil {
-			// 	log.Println("[router]", err)
-			// 	return
-			// }
-			// err = codegen.Generate(routes)
-			// if err != nil {
-			// 	log.Println("[codegen]", err)
-			// 	return
-			// }
 			rebuild(server.scanner, server.router, server.codegen)
-			log.Println("[reload]", filename)
 
-			runner.create()
-			runner.start()
+			runner.restart()
 
 			runner.update(filename, "")
-
 			runner.update("@nova/hmr.js", hmr)
-
 			root := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static"))
 			for filename, contents := range files {
 				name, _ := filepath.Rel(root, filename)
 				runner.update(name, contents)
 			}
+
+			log.Println("[reload]", filename)
 		},
 		"*.js,*.jsx,*.ts,*.tsx,*.css": func(name string) {
 			root := module.Abs(p.config.Router.Pages)
@@ -196,10 +163,9 @@ func (p *projectContextImpl) Build() error {
 	os.Setenv("NOVA_ENV", "production")
 
 	scanner := newScanner(p.config)
-	esbuild := esbuild.NewESBuild(p.config)
+	// esbuild := esbuild.NewESBuild(p.config)
 	router := router.NewRouter(p.config)
 	codegen := codegen.NewCodegen(p.config)
-	runner := newRunner(p.config)
 
 	err := rebuild(scanner, router, codegen)
 	if err != nil {
