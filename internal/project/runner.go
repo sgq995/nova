@@ -62,11 +62,15 @@ func (r *runner) restart() {
 	r.start()
 }
 
-func (r *runner) update(filename, contents string) error {
+func (r *runner) update(filename string, contents []byte) error {
 	log.Println("[runner]", filename)
 	writer := bufio.NewWriter(r.stdin)
-	command := fmt.Sprintf("UPDATE %s %d\n%s", filename, len(contents), contents)
+	command := fmt.Sprintf("UPDATE %s %d\n", filename, len(contents))
 	_, err := writer.WriteString(command)
+	if err != nil {
+		return err
+	}
+	_, err = writer.Write(contents)
 	if err != nil {
 		return err
 	}

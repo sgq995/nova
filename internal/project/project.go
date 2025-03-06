@@ -16,7 +16,7 @@ import (
 )
 
 //go:embed hmr.js
-var hmr string
+var hmr []byte
 
 type Server interface {
 	Dispose()
@@ -98,7 +98,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 
 			runner.restart()
 
-			runner.update(filename, "")
+			runner.update(filename, []byte{})
 			runner.update("@nova/hmr.js", hmr)
 			root := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static"))
 			for filename, contents := range files {
@@ -141,7 +141,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 		},
 		"*.html": func(name string) {
 			log.Println("[reload]", name)
-			runner.update(name, "")
+			runner.update(name, []byte{})
 		},
 	})
 

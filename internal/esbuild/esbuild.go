@@ -12,7 +12,7 @@ import (
 )
 
 type ESBuildContext interface {
-	Build() (map[string]string, error)
+	Build() (map[string][]byte, error)
 
 	Dispose()
 }
@@ -22,16 +22,16 @@ type esbuildContextImpl struct {
 	nodeModules api.BuildContext
 }
 
-func (ctx *esbuildContextImpl) Build() (map[string]string, error) {
+func (ctx *esbuildContextImpl) Build() (map[string][]byte, error) {
 	result := ctx.nodeModules.Rebuild()
 	if len(result.Errors) > 0 {
 
 	}
 
 	result = ctx.app.Rebuild()
-	files := map[string]string{}
+	files := map[string][]byte{}
 	for _, f := range result.OutputFiles {
-		files[f.Path] = string(f.Contents)
+		files[f.Path] = f.Contents
 	}
 
 	return files, nil
