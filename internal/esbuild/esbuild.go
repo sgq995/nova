@@ -61,6 +61,9 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 		Bundle:      true,
 		Splitting:   true,
 		Sourcemap:   api.SourceMapInline,
+		Banner: map[string]string{
+			"js": `import "/@nova/hmr.js";`,
+		},
 		Plugins: []api.Plugin{
 			{
 				Name: "nova-node_modules",

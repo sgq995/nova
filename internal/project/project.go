@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	_ "embed"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,6 +13,9 @@ import (
 	"github.com/sgq995/nova/internal/module"
 	"github.com/sgq995/nova/internal/router"
 )
+
+//go:embed hmr.js
+var hmr string
 
 type Server interface {
 	Dispose()
@@ -91,6 +95,8 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 		return nil, err
 	}
 
+	runner.update("@nova/hmr.js", hmr)
+
 	root := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static"))
 	for filename, contents := range files {
 		name, _ := filepath.Rel(root, filename)
@@ -120,6 +126,14 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 
 			runner.create()
 			runner.start()
+
+			runner.update("@nova/hmr.js", hmr)
+
+			root := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static"))
+			for filename, contents := range files {
+				name, _ := filepath.Rel(root, filename)
+				runner.update(name, contents)
+			}
 		},
 		"*.js": func(name string) {
 			root := module.Abs(p.config.Router.Pages)

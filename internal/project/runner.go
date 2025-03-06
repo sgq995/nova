@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,6 +58,7 @@ func (r *runner) stop() {
 }
 
 func (r *runner) update(filename, contents string) error {
+	log.Println("[runner]", filename)
 	writer := bufio.NewWriter(r.stdin)
 	command := fmt.Sprintf("UPDATE %s %d\n%s", filename, len(contents), contents)
 	_, err := writer.WriteString(command)

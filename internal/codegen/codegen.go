@@ -16,6 +16,7 @@ const mainTmpl string = `package main
 
 import (
 	"bufio"
+	"fmt"
 	"html/template"
 	"io"
 	"io/fs"
@@ -97,7 +98,7 @@ func (fi *esbuildFileInfo) Sys() any {
 	return nil
 }
 
-func esbuildScanner(fsys *esbuildFS) {
+func esbuildScanner(fsys *esbuildFS, ch chan string) {
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		line, err := reader.ReadString('\n')
@@ -123,12 +124,46 @@ func esbuildScanner(fsys *esbuildFS) {
 		if err != nil {
 			panic(err)
 		}
+		log.Println("[main.go]", line)
 
 		switch command {
 		case "UPDATE":
 			fsys.files[filename] = contents
+			select {
+			case ch <- filename:
+
+			default:
+			}
 		}
 	}
+}
+
+func hmr(ch chan string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+
+		rc := http.NewResponseController(w)
+
+		ctx := r.Context()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+
+			case filename := <-ch:
+				_, err := fmt.Fprintf(w, "event: change\ndata: { \"updated\": [\"%s\"] }\n\n", filename)
+				if err != nil {
+					return
+				}
+				err = rc.Flush()
+				if err != nil {
+					return
+				}
+			}
+		}
+	})
 }
 {{end}}
 
@@ -155,10 +190,12 @@ func main() {
 	{{range $handler.Rest}}mux.HandleFunc("{{.Pattern}}", {{$handler.Package}}.{{.Handler}}){{end}}
 	{{end}}
 	{{if not .IsProd}}
+	ch := make(chan string)
 	fsys := &esbuildFS{files: make(map[string][]byte)}
-	go esbuildScanner(fsys)
+	go esbuildScanner(fsys, ch)
 	mux.Handle("/", http.FileServerFS(fsys))
-	mux.Handle("/@node_modules/", http.StripPrefix("/@node_modules", http.FileServer(http.Dir("{{.NodeModules}}"))))
+	mux.Handle("/@node_modules/", http.StripPrefix("/@node_modules", http.FileServer(http.Dir("/home/sebastian/Proyectos/Personal/nova/node_modules/.nova"))))
+	mux.Handle("/@nova/hmr", hmr(ch))
 	{{end}}
 	s := http.Server{
 		Addr:    "{{.Host}}:{{.Port}}",
