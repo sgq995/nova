@@ -28,6 +28,10 @@ type serverConfigFile struct {
 }
 
 func transformServerConfigFile(dcf *serverConfigFile) ServerConfig {
+	if dcf == nil {
+		return ServerConfig{}
+	}
+
 	var host string
 	if dcf.Host != nil {
 		host = *dcf.Host

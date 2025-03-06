@@ -21,6 +21,10 @@ type codegenConfigFile struct {
 }
 
 func transformCodegenConfigFile(ccf *codegenConfigFile) CodegenConfig {
+	if ccf == nil {
+		return CodegenConfig{}
+	}
+
 	var outDir string
 	if ccf.outDir != nil {
 		outDir = *ccf.outDir

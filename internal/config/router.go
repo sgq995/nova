@@ -28,6 +28,10 @@ type routerConfigFile struct {
 }
 
 func transformRouterConfigFile(rcf *routerConfigFile) RouterConfig {
+	if rcf == nil {
+		return RouterConfig{}
+	}
+
 	var pages string
 	if rcf.Pages != nil {
 		pages = *rcf.Pages
