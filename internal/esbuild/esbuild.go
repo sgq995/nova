@@ -93,7 +93,7 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 
 						return api.OnResolveResult{
 							External:  true,
-							Path:      "/@node_modules/" + ora.Path,
+							Path:      "/@node_modules/" + ora.Path + ".js",
 							Namespace: "@node_modules",
 
 							PluginData: result.PluginData,
