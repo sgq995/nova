@@ -87,6 +87,17 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 		esbuild: esbuildCtx,
 	}
 
+	files, err := esbuildCtx.Build()
+	if err != nil {
+		return nil, err
+	}
+
+	root := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static"))
+	for filename, contents := range files {
+		name, _ := filepath.Rel(root, filename)
+		runner.update(name, contents)
+	}
+
 	watcher := newWatcher(ctx, map[string]func(string){
 		"*.go": func(filename string) {
 			runner.stop()

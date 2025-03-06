@@ -60,6 +60,7 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 		Format:      api.FormatESModule,
 		Bundle:      true,
 		Splitting:   true,
+		Sourcemap:   api.SourceMapLinked,
 		Plugins: []api.Plugin{
 			{
 				Name: "nova-node_modules",
@@ -109,8 +110,6 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 	if ctxErr != nil {
 		log.Fatalln(ctxErr)
 	}
-
-	appCtx.Rebuild()
 
 	nodeModulesEntries := []api.EntryPoint{}
 	for dep, file := range nodeModules {
