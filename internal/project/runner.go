@@ -25,7 +25,7 @@ func newRunner(c *config.Config) *runner {
 	return &runner{config: c}
 }
 
-func (r *runner) start() error {
+func (r *runner) start(files map[string][]byte) error {
 	main := filepath.Join(module.Root(), r.config.Codegen.OutDir, "main.go")
 	cmd := exec.Command("go", "run", main)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -46,6 +46,10 @@ func (r *runner) start() error {
 		return err
 	}
 
+	for name, contents := range files {
+		r.update(name, contents)
+	}
+
 	return nil
 }
 
@@ -57,15 +61,15 @@ func (r *runner) stop() {
 	r.cmd.Wait()
 }
 
-func (r *runner) restart() {
+func (r *runner) restart(files map[string][]byte) {
 	r.stop()
-	r.start()
+	r.start(files)
 }
 
-func (r *runner) update(filename string, contents []byte) error {
-	log.Println("[runner]", filename)
+func (r *runner) update(name string, contents []byte) error {
+	log.Println("[runner]", name)
 	writer := bufio.NewWriter(r.stdin)
-	command := fmt.Sprintf("UPDATE %s %d\n", filename, len(contents))
+	command := fmt.Sprintf("UPDATE %s %d\n", name, len(contents))
 	_, err := writer.WriteString(command)
 	if err != nil {
 		return err

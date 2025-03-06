@@ -78,33 +78,35 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 		esbuild: esbuildCtx,
 	}
 
-	files, err := esbuildCtx.Build()
+	staticFiles, err := esbuildCtx.Build()
 	if err != nil {
 		return nil, err
 	}
 
-	runner.start()
-
-	runner.update("@nova/hmr.js", hmr)
+	files := map[string][]byte{"@nova/hmr.js": hmr}
 	root := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static"))
-	for filename, contents := range files {
+	for filename, contents := range staticFiles {
 		name, _ := filepath.Rel(root, filename)
-		runner.update(name, contents)
+		files[name] = contents
 	}
+
+	runner.start(files)
 
 	watcher := newWatcher(ctx, map[string]func(string){
 		"*.go": func(filename string) {
 			rebuild(server.scanner, server.router, server.codegen)
 
-			runner.restart()
-
-			runner.update(filename, []byte{})
-			runner.update("@nova/hmr.js", hmr)
-			root := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static"))
-			for filename, contents := range files {
-				name, _ := filepath.Rel(root, filename)
-				runner.update(name, contents)
+			files := map[string][]byte{
+				filename:       {},
+				"@nova/hmr.js": hmr,
 			}
+			root := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static"))
+			for filename, contents := range staticFiles {
+				name, _ := filepath.Rel(root, filename)
+				files[name] = contents
+			}
+
+			runner.restart(files)
 
 			log.Println("[reload]", filename)
 		},
@@ -144,17 +146,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 			runner.update(name, []byte{})
 		},
 	})
-
 	go watcher.watch(p.config.Router.Pages)
-
-	// proxyUrl := BundlerServe(files)
-	// Watch()
-	// -> files := Scan(pages)
-	// -> Link(files)
-	// -> Bundle(files)
-	// -> router := CreateRouter(files, WithProxy(proxyUrl))
-	// -> Execute(mainTemplate, router)
-	// -> Serve()
 
 	return server, nil
 }
