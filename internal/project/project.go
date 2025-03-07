@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 	_ "embed"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -146,23 +147,40 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 func (p *projectContextImpl) Build() error {
 	os.Setenv("NOVA_ENV", "production")
 
-	esbuild := esbuild.NewESBuild(p.config)
-	scanner := newScanner(p.config)
-	router := router.NewRouter(p.config)
-	codegen := codegen.NewCodegen(p.config)
+	e := esbuild.NewESBuild(p.config)
+	s := newScanner(p.config)
+	r := router.NewRouter(p.config)
+	c := codegen.NewCodegen(p.config)
 
-	if err := scanner.scan(); err != nil {
+	if err := s.scan(); err != nil {
 		return err
 	}
 
-	static := slices.Concat(scanner.htmlFiles, scanner.jsFiles, scanner.cssFiles)
-	if err := esbuild.Build(static); err != nil {
+	static := slices.Concat(s.jsFiles, s.cssFiles)
+	staticDir := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static"))
+	staticEntryMap, err := e.Build(esbuild.BuildOptions{
+		EntryPoints: static,
+		Outdir:      staticDir,
+	})
+	if err != nil {
 		return err
 	}
+
+	fmt.Println(staticEntryMap)
+
+	templates := s.htmlFiles
+	templatesDir := module.Abs(filepath.Join(p.config.Codegen.OutDir, "templates"))
+	templatesEntryMap, err := e.Build(esbuild.BuildOptions{
+		EntryPoints: templates,
+		Outdir:      templatesDir,
+		EntryMap:    staticEntryMap,
+	})
+
+	fmt.Println(templatesEntryMap)
 
 	// TODO: modify scanner to point output files
 
-	if err := rebuild(scanner, router, codegen); err != nil {
+	if err := rebuild(s, r, c); err != nil {
 		return err
 	}
 

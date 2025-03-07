@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -166,33 +165,25 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 	}
 }
 
-func (esbuild *ESBuild) Build(entryPoints []string) error {
+type BuildOptions struct {
+	EntryPoints []string
+	Outdir      string
+	EntryMap    map[string]string
+}
+
+func (esbuild *ESBuild) Build(options BuildOptions) (map[string]string, error) {
 	pages := module.Abs(esbuild.config.Router.Pages)
-	static := module.Abs(filepath.Join(esbuild.config.Codegen.OutDir, "static"))
-	templates := module.Abs(filepath.Join(esbuild.config.Codegen.OutDir, "templates"))
 
-	staticFiles := []string{}
-	templateFiles := []string{}
-	for _, entry := range entryPoints {
-		switch filepath.Ext(entry) {
-		case ".html":
-			templateFiles = append(templateFiles, entry)
-
-		default:
-			staticFiles = append(staticFiles, entry)
-		}
-	}
-
-	utils.Clean(static)
+	utils.Clean(options.Outdir)
 	result := api.Build(api.BuildOptions{
-		EntryPoints:       staticFiles,
+		EntryPoints:       options.EntryPoints,
 		EntryNames:        "[dir]/[name].[hash]",
 		Bundle:            true,
 		Write:             true,
 		Metafile:          true,
 		Format:            api.FormatESModule,
 		Splitting:         true,
-		Outdir:            static,
+		Outdir:            options.Outdir,
 		MinifyWhitespace:  true,
 		MinifyIdentifiers: true,
 		MinifySyntax:      true,
@@ -208,29 +199,6 @@ func (esbuild *ESBuild) Build(entryPoints []string) error {
 					})
 				},
 			},
-		},
-	})
-	if len(result.Errors) > 0 {
-		return esbuildError(result.Errors)
-	}
-
-	metafile := result.Metafile
-
-	utils.Clean(templates)
-	result = api.Build(api.BuildOptions{
-		EntryPoints:       templateFiles,
-		EntryNames:        "[dir]/[name]",
-		Bundle:            true,
-		Write:             true,
-		Format:            api.FormatESModule,
-		Splitting:         true,
-		Outdir:            templates,
-		MinifyWhitespace:  true,
-		MinifyIdentifiers: true,
-		MinifySyntax:      true,
-		Sourcemap:         api.SourceMapNone,
-		LegalComments:     api.LegalCommentsExternal,
-		Plugins: []api.Plugin{
 			{
 				Name: "nova-html",
 				Setup: func(pb api.PluginBuild) {
@@ -248,39 +216,13 @@ func (esbuild *ESBuild) Build(entryPoints []string) error {
 					})
 
 					pb.OnEnd(func(result *api.BuildResult) (api.OnEndResult, error) {
-						meta := make(map[string]any)
-						err := json.Unmarshal([]byte(metafile), &meta)
-						if err != nil {
-							return api.OnEndResult{}, err
-						}
-
-						wd, _ := os.Getwd()
-						entryMap := make(map[string]string)
-						outputs := meta["outputs"].(map[string]any)
-						fmt.Println("map")
-						for out := range outputs {
-							val := outputs[out].(map[string]any)
-							in, ok := val["entryPoint"].(string)
-							if !ok {
-								continue
-							}
-
-							outSrc := filepath.Join(wd, out)
-							inSrc := filepath.Join(wd, in)
-							fmt.Println(inSrc, "->", outSrc)
-
-							entryMap[inSrc] = outSrc
-						}
-
-						fmt.Println("\noutput")
-
 						errs := []error{}
 						for _, file := range result.OutputFiles {
 							if !strings.HasSuffix(file.Path, ".html") {
 								continue
 							}
 
-							current := filepath.Join(pages, strings.TrimPrefix(filepath.Dir(file.Path), templates))
+							current := filepath.Join(pages, strings.TrimPrefix(filepath.Dir(file.Path), options.Outdir))
 
 							doc, err := html.Parse(bytes.NewReader(file.Contents))
 							if err != nil {
@@ -319,12 +261,10 @@ func (esbuild *ESBuild) Build(entryPoints []string) error {
 								} else {
 									filename = filepath.Join(current, name)
 								}
-								fmt.Printf("%s -> ", filename)
-								filename = entryMap[filename]
-								fmt.Printf("%s", filename)
 
-								fmt.Printf("%s\n\n", strings.TrimPrefix(filename, static))
-								n.Attr[index].Val = strings.TrimPrefix(filename, static)
+								if filename, exists := options.EntryMap[filename]; exists {
+									n.Attr[index].Val = filename
+								}
 							}
 
 							var buf bytes.Buffer
@@ -350,8 +290,31 @@ func (esbuild *ESBuild) Build(entryPoints []string) error {
 		},
 	})
 	if len(result.Errors) > 0 {
-		return esbuildError(result.Errors)
+		return nil, esbuildError(result.Errors)
 	}
 
-	return nil
+	meta := make(map[string]any)
+	err := json.Unmarshal([]byte(result.Metafile), &meta)
+	if err != nil {
+		return nil, err
+	}
+
+	wd, _ := os.Getwd()
+	entryMap := make(map[string]string)
+	outputs := meta["outputs"].(map[string]any)
+	for out := range outputs {
+		val := outputs[out].(map[string]any)
+		in, ok := val["entryPoint"].(string)
+		if !ok {
+			continue
+		}
+
+		inSrc := filepath.Join(wd, in)
+		outSrc := filepath.Join(wd, out)
+		outSrc, _ = filepath.Rel(options.Outdir, outSrc)
+
+		entryMap[inSrc] = outSrc
+	}
+
+	return entryMap, nil
 }
