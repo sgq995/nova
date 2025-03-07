@@ -22,3 +22,15 @@ func FileExists(filename string) (bool, error) {
 	}
 	return true, nil
 }
+
+func Clean(dir string) error {
+	err := os.RemoveAll(dir)
+	if err != nil {
+		return err
+	}
+	err = os.MkdirAll(dir, 0755)
+	if err != nil {
+		return err
+	}
+	return nil
+}

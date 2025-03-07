@@ -29,14 +29,6 @@ type ProjectContext interface {
 }
 
 func Context(c config.Config) (ProjectContext, error) {
-	// Scan should Link as those are correlated
-	// files := Scan(pages)
-	// Link(files)
-
-	// CreateRouter and Exec should be merged into Generate
-	// router := CreateRouter(files, WithProxy(proxyUrl))
-	// Execute(mainTemplate, router)
-
 	return &projectContextImpl{config: &c}, nil
 }
 
@@ -154,13 +146,23 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 func (p *projectContextImpl) Build() error {
 	os.Setenv("NOVA_ENV", "production")
 
+	esbuild := esbuild.NewESBuild(p.config)
 	scanner := newScanner(p.config)
-	// esbuild := esbuild.NewESBuild(p.config)
 	router := router.NewRouter(p.config)
 	codegen := codegen.NewCodegen(p.config)
 
-	err := rebuild(scanner, router, codegen)
-	if err != nil {
+	if err := scanner.scan(); err != nil {
+		return err
+	}
+
+	static := slices.Concat(scanner.htmlFiles, scanner.jsFiles, scanner.cssFiles)
+	if err := esbuild.Build(static); err != nil {
+		return err
+	}
+
+	// TODO: modify scanner to point output files
+
+	if err := rebuild(scanner, router, codegen); err != nil {
 		return err
 	}
 
