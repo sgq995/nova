@@ -1,15 +1,32 @@
 package esbuild
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/sgq995/nova/internal/config"
 	"github.com/sgq995/nova/internal/module"
+	"github.com/sgq995/nova/internal/utils"
+	"github.com/tdewolff/minify/v2"
+	minifyHTML "github.com/tdewolff/minify/v2/html"
+	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
+
+func esbuildError(messages []api.Message) error {
+	errs := []error{}
+	for _, msg := range messages {
+		errs = append(errs, errors.New(msg.Text))
+	}
+	return errors.Join(errs...)
+}
 
 type ESBuildContext interface {
 	Build() (map[string][]byte, error)
@@ -114,6 +131,11 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 		log.Fatalln(ctxErr)
 	}
 
+	result := appCtx.Rebuild()
+	if len(result.Errors) > 0 {
+		log.Fatalln(esbuildError(result.Errors))
+	}
+
 	nodeModulesEntries := []api.EntryPoint{}
 	for dep, file := range nodeModules {
 		nodeModulesEntries = append(nodeModulesEntries, api.EntryPoint{
@@ -132,10 +154,164 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 		MinifySyntax:        true,
 	})
 
-	nodeModulesCtx.Rebuild()
+	result = nodeModulesCtx.Rebuild()
+	if len(result.Errors) > 0 {
+		log.Fatalln(esbuildError(result.Errors))
+	}
 
 	return &esbuildContextImpl{
 		app:         appCtx,
 		nodeModules: nodeModulesCtx,
 	}
+}
+
+func (esbuild *ESBuild) Build(entryPoints []string) error {
+	pages := module.Abs(esbuild.config.Router.Pages)
+	static := module.Abs(filepath.Join(esbuild.config.Codegen.OutDir, "static"))
+
+	utils.Clean(static)
+	result := api.Build(api.BuildOptions{
+		EntryPoints: entryPoints,
+		EntryNames:  "[dir]/[name].[hash]",
+		Bundle:      true,
+		// Write:             true,
+		Metafile:          true,
+		Format:            api.FormatESModule,
+		Splitting:         true,
+		Outdir:            static,
+		MinifyWhitespace:  true,
+		MinifyIdentifiers: true,
+		MinifySyntax:      true,
+		Sourcemap:         api.SourceMapNone,
+		LegalComments:     api.LegalCommentsExternal,
+		Plugins: []api.Plugin{
+			{
+				Name: "nova-metafile",
+				Setup: func(pb api.PluginBuild) {
+					pb.OnEnd(func(result *api.BuildResult) (api.OnEndResult, error) {
+						err := os.WriteFile(module.Abs(filepath.Join(esbuild.config.Codegen.OutDir, "metafile.json")), []byte(result.Metafile), 0755)
+						return api.OnEndResult{}, err
+					})
+				},
+			},
+			{
+				Name: "nova-html",
+				Setup: func(pb api.PluginBuild) {
+					pb.OnLoad(api.OnLoadOptions{Filter: "\\.html$"}, func(ola api.OnLoadArgs) (api.OnLoadResult, error) {
+						b, err := os.ReadFile(ola.Path)
+						if err != nil {
+							return api.OnLoadResult{}, err
+						}
+
+						contents := string(b)
+						return api.OnLoadResult{
+							Contents: &contents,
+							Loader:   api.LoaderCopy,
+						}, nil
+					})
+
+					pb.OnEnd(func(result *api.BuildResult) (api.OnEndResult, error) {
+						meta := make(map[string]any)
+						err := json.Unmarshal([]byte(result.Metafile), &meta)
+						if err != nil {
+							return api.OnEndResult{}, err
+						}
+
+						wd, _ := os.Getwd()
+						entryMap := make(map[string]string)
+						outputs := meta["outputs"].(map[string]any)
+						for out := range outputs {
+							val := outputs[out].(map[string]any)
+							in, ok := val["entryPoint"].(string)
+							if !ok {
+								continue
+							}
+
+							outSrc := filepath.Join(wd, out)
+							inSrc := filepath.Join(wd, in)
+
+							entryMap[inSrc] = outSrc
+						}
+
+						errs := []error{}
+						for _, file := range result.OutputFiles {
+							if !strings.HasSuffix(file.Path, ".html") {
+								continue
+							}
+
+							current := filepath.Join(pages, strings.TrimPrefix(filepath.Dir(file.Path), static))
+
+							doc, err := html.Parse(bytes.NewReader(file.Contents))
+							if err != nil {
+								errs = append(errs, err)
+								continue
+							}
+
+							for n := range doc.Descendants() {
+								if n.Type != html.ElementNode {
+									continue
+								}
+
+								var index int
+								switch n.DataAtom {
+								case atom.Script:
+									index = slices.IndexFunc(n.Attr, func(attr html.Attribute) bool {
+										return attr.Key == "src"
+									})
+
+								case atom.Link:
+									index = slices.IndexFunc(n.Attr, func(attr html.Attribute) bool {
+										return attr.Key == "href"
+									})
+
+								default:
+									continue
+								}
+								if index == -1 {
+									continue
+								}
+
+								var filename string
+								name := n.Attr[index].Val
+								if strings.HasPrefix(name, "/") {
+									filename = filepath.Join(pages, name)
+								} else {
+									filename = filepath.Join(current, name)
+								}
+								filename = entryMap[filename]
+
+								n.Attr[index].Val = strings.TrimPrefix(filename, static)
+							}
+
+							var buf bytes.Buffer
+							html.Render(&buf, doc)
+
+							m := minify.New()
+							m.Add("text/html", &minifyHTML.Minifier{TemplateDelims: minifyHTML.GoTemplateDelims})
+							b, err := m.Bytes("text/html", buf.Bytes())
+							if err != nil {
+								errs = append(errs, err)
+							}
+
+							os.WriteFile(file.Path, b, 0755)
+						}
+						if len(errs) > 0 {
+							return api.OnEndResult{}, errors.Join(errs...)
+						}
+
+						return api.OnEndResult{}, nil
+					})
+				},
+			},
+		},
+	})
+	if len(result.Errors) > 0 {
+		return esbuildError(result.Errors)
+	}
+
+	// for _, file := range result.OutputFiles {
+
+	// }
+
+	return nil
 }
