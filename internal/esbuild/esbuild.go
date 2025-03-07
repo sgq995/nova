@@ -208,82 +208,65 @@ func (esbuild *ESBuild) Build(options BuildOptions) (map[string]string, error) {
 							return api.OnLoadResult{}, err
 						}
 
+						current := filepath.Dir(ola.Path)
+
+						doc, err := html.Parse(bytes.NewReader(b))
+						if err != nil {
+							return api.OnLoadResult{}, err
+						}
+
+						for n := range doc.Descendants() {
+							if n.Type != html.ElementNode {
+								continue
+							}
+
+							var index int
+							switch n.DataAtom {
+							case atom.Script:
+								index = slices.IndexFunc(n.Attr, func(attr html.Attribute) bool {
+									return attr.Key == "src"
+								})
+
+							case atom.Link:
+								index = slices.IndexFunc(n.Attr, func(attr html.Attribute) bool {
+									return attr.Key == "href"
+								})
+
+							default:
+								continue
+							}
+							if index == -1 {
+								continue
+							}
+
+							var filename string
+							name := n.Attr[index].Val
+							if strings.HasPrefix(name, "/") {
+								filename = filepath.Join(pages, name)
+							} else {
+								filename = filepath.Join(current, name)
+							}
+
+							if filename, exists := options.EntryMap[filename]; exists {
+								n.Attr[index].Val = filename
+							}
+						}
+
+						var buf bytes.Buffer
+						html.Render(&buf, doc)
+
+						m := minify.New()
+						m.Add("text/html", &minifyHTML.Minifier{TemplateDelims: minifyHTML.GoTemplateDelims})
+						b, err = m.Bytes("text/html", buf.Bytes())
+						if err != nil {
+							return api.OnLoadResult{}, err
+						}
+
 						contents := string(b)
 						return api.OnLoadResult{
 							Contents: &contents,
 							Loader:   api.LoaderCopy,
 						}, nil
-					})
-
-					pb.OnEnd(func(result *api.BuildResult) (api.OnEndResult, error) {
-						errs := []error{}
-						for _, file := range result.OutputFiles {
-							if !strings.HasSuffix(file.Path, ".html") {
-								continue
-							}
-
-							current := filepath.Join(pages, strings.TrimPrefix(filepath.Dir(file.Path), options.Outdir))
-
-							doc, err := html.Parse(bytes.NewReader(file.Contents))
-							if err != nil {
-								errs = append(errs, err)
-								continue
-							}
-
-							for n := range doc.Descendants() {
-								if n.Type != html.ElementNode {
-									continue
-								}
-
-								var index int
-								switch n.DataAtom {
-								case atom.Script:
-									index = slices.IndexFunc(n.Attr, func(attr html.Attribute) bool {
-										return attr.Key == "src"
-									})
-
-								case atom.Link:
-									index = slices.IndexFunc(n.Attr, func(attr html.Attribute) bool {
-										return attr.Key == "href"
-									})
-
-								default:
-									continue
-								}
-								if index == -1 {
-									continue
-								}
-
-								var filename string
-								name := n.Attr[index].Val
-								if strings.HasPrefix(name, "/") {
-									filename = filepath.Join(pages, name)
-								} else {
-									filename = filepath.Join(current, name)
-								}
-
-								if filename, exists := options.EntryMap[filename]; exists {
-									n.Attr[index].Val = filename
-								}
-							}
-
-							var buf bytes.Buffer
-							html.Render(&buf, doc)
-
-							m := minify.New()
-							m.Add("text/html", &minifyHTML.Minifier{TemplateDelims: minifyHTML.GoTemplateDelims})
-							b, err := m.Bytes("text/html", buf.Bytes())
-							if err != nil {
-								errs = append(errs, err)
-							}
-
-							os.WriteFile(file.Path, b, 0755)
-						}
-						if len(errs) > 0 {
-							return api.OnEndResult{}, errors.Join(errs...)
-						}
-
-						return api.OnEndResult{}, nil
 					})
 				},
 			},
