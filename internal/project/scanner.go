@@ -14,22 +14,18 @@ import (
 type scanner struct {
 	config *config.Config
 
-	goFiles    []string
-	jsFiles    []string
-	cssFiles   []string
-	htmlFiles  []string
-	assetFiles []string
-
-	linkedFiles map[string][]string
+	goFiles       []string
+	jsFiles       []string
+	cssFiles      []string
+	htmlFiles     []string
+	templateFiles []string
+	assetFiles    []string
 
 	pages []string
 }
 
 func newScanner(c *config.Config) *scanner {
-	return &scanner{
-		config:      c,
-		linkedFiles: make(map[string][]string),
-	}
+	return &scanner{config: c}
 }
 
 func (p *scanner) scan() error {
@@ -90,12 +86,21 @@ func (p *scanner) findFiles(base string) error {
 }
 
 func (p *scanner) linkFiles() error {
+	linkedFiles := map[string][]string{}
+
 	for _, filename := range p.goFiles {
 		imports, err := parser.ParseImportsGo(filename)
 		if err != nil {
 			return err
 		}
-		p.linkedFiles[filename] = imports
+		linkedFiles[filename] = imports
+	}
+
+	html := slices.Concat(slices.Collect(maps.Values(linkedFiles))...)
+	for _, filename := range html {
+		if filepath.Ext(filename) == ".html" {
+			p.templateFiles = append(p.templateFiles, filename)
+		}
 	}
 
 	for _, filename := range p.htmlFiles {
@@ -103,7 +108,7 @@ func (p *scanner) linkFiles() error {
 		if err != nil {
 			return err
 		}
-		p.linkedFiles[filename] = imports
+		linkedFiles[filename] = imports
 	}
 
 	return nil
@@ -114,7 +119,7 @@ func (p *scanner) findPageFiles() error {
 
 	type void struct{}
 	templates := map[string]void{}
-	imports := slices.Concat(slices.Collect(maps.Values(p.linkedFiles))...)
+	imports := p.templateFiles
 	for _, tmpl := range imports {
 		templates[tmpl] = void{}
 	}

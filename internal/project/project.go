@@ -3,7 +3,6 @@ package project
 import (
 	"context"
 	_ "embed"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -161,24 +160,32 @@ func (p *projectContextImpl) Build() error {
 	staticEntryMap, err := e.Build(esbuild.BuildOptions{
 		EntryPoints: static,
 		Outdir:      staticDir,
+		Hashing:     true,
 	})
 	if err != nil {
 		return err
 	}
 
-	fmt.Println(staticEntryMap)
-
-	templates := s.htmlFiles
+	templates := s.templateFiles
 	templatesDir := module.Abs(filepath.Join(p.config.Codegen.OutDir, "templates"))
-	templatesEntryMap, err := e.Build(esbuild.BuildOptions{
+	_, err = e.Build(esbuild.BuildOptions{
 		EntryPoints: templates,
 		Outdir:      templatesDir,
 		EntryMap:    staticEntryMap,
 	})
 
-	fmt.Println(templatesEntryMap)
-
-	// TODO: modify scanner to point output files
+	pages := []string{}
+	for _, page := range s.htmlFiles {
+		if !slices.Contains(s.templateFiles, page) {
+			pages = append(pages, page)
+		}
+	}
+	pagesDir := module.Abs(filepath.Join(p.config.Codegen.OutDir, "pages"))
+	_, err = e.Build(esbuild.BuildOptions{
+		EntryPoints: pages,
+		Outdir:      pagesDir,
+		EntryMap:    staticEntryMap,
+	})
 
 	if err := rebuild(s, r, c); err != nil {
 		return err

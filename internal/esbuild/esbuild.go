@@ -169,15 +169,20 @@ type BuildOptions struct {
 	EntryPoints []string
 	Outdir      string
 	EntryMap    map[string]string
+	Hashing     bool
 }
 
 func (esbuild *ESBuild) Build(options BuildOptions) (map[string]string, error) {
 	pages := module.Abs(esbuild.config.Router.Pages)
+	entryNames := "[dir]/[name].[hash]"
+	if options.Hashing == false {
+		entryNames = "[dir]/[name]"
+	}
 
 	utils.Clean(options.Outdir)
 	result := api.Build(api.BuildOptions{
 		EntryPoints:       options.EntryPoints,
-		EntryNames:        "[dir]/[name].[hash]",
+		EntryNames:        entryNames,
 		Bundle:            true,
 		Write:             true,
 		Metafile:          true,
