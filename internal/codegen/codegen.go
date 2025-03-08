@@ -33,11 +33,22 @@ import (
 )
 
 {{if .IsProd}}
-//go:embed static/*
+//go:embed static
 var staticFS embed.FS
 
-//go:embed templates/*
-var templatesFS embed.FS
+//go:embed pages templates
+var htmlFS embed.FS
+
+var templatesFS fs.FS = must(fs.Sub(htmlFS, "templates"))
+
+var pagesFS fs.FS = must(fs.Sub(htmlFS, "pages"))
+
+func must[T any](obj T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
 {{else}}
 type esbuildFS struct {
 	files map[string][]byte
@@ -177,11 +188,12 @@ func hmr(ch chan string) http.Handler {
 
 func renderHandler(root string, templates []string, render func(*template.Template, http.ResponseWriter, *http.Request) error) http.Handler {
 	{{if .IsProd -}}
-	sub, err := fs.Sub(templatesFS, "templates")
+	sub, err := fs.Sub(templatesFS, root)
 	if err != nil {
 		panic(err)
 	}
-	t := template.Must(template.ParseFS(sub, templates...)){{end}}
+	t := template.Must(template.ParseFS(sub, templates...))
+	{{end}}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		{{if not .IsProd -}}
 		fs := os.DirFS("{{.Root}}" + root)
@@ -204,6 +216,7 @@ func main() {
 	// nova
 	{{- if .IsProd}}
 	mux.Handle("/static/", http.FileServerFS(staticFS))
+	mux.Handle("/", http.FileServerFS(pagesFS))
 	{{else}}
 	ch := make(chan string, 16)
 	fsys := &esbuildFS{files: make(map[string][]byte)}
