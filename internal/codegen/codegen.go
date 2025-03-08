@@ -17,13 +17,13 @@ const mainTmpl string = `package main
 import (
 {{if .IsProd}}	"embed"{{end}}
 	"html/template"
+	"io/fs"
 	"log"
 	"net/http"
 {{if not .IsProd -}}
 	"bufio"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"strconv"
 	"strings"
@@ -35,6 +35,9 @@ import (
 {{if .IsProd}}
 //go:embed static/*
 var staticFS embed.FS
+
+//go:embed templates/*
+var templatesFS embed.FS
 {{else}}
 type esbuildFS struct {
 	files map[string][]byte
@@ -174,7 +177,11 @@ func hmr(ch chan string) http.Handler {
 
 func renderHandler(root string, templates []string, render func(*template.Template, http.ResponseWriter, *http.Request) error) http.Handler {
 	{{if .IsProd -}}
-	t := template.Must(template.ParseFS(staticFS, templates...)){{end}}
+	sub, err := fs.Sub(templatesFS, "templates")
+	if err != nil {
+		panic(err)
+	}
+	t := template.Must(template.ParseFS(sub, templates...)){{end}}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		{{if not .IsProd -}}
 		fs := os.DirFS("{{.Root}}" + root)

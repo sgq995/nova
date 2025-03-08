@@ -253,7 +253,7 @@ func (esbuild *ESBuild) Build(options BuildOptions) (map[string]string, error) {
 							}
 
 							if filename, exists := options.EntryMap[filename]; exists {
-								n.Attr[index].Val = filename
+								n.Attr[index].Val = "/static/" + filename
 							}
 						}
 
@@ -261,7 +261,7 @@ func (esbuild *ESBuild) Build(options BuildOptions) (map[string]string, error) {
 						html.Render(&buf, doc)
 
 						m := minify.New()
-						m.Add("text/html", &minifyHTML.Minifier{TemplateDelims: minifyHTML.GoTemplateDelims})
+						m.AddFunc("text/html", minifyHTML.Minify)
 						b, err = m.Bytes("text/html", buf.Bytes())
 						if err != nil {
 							return api.OnLoadResult{}, err
