@@ -15,22 +15,27 @@ import (
 const mainTmpl string = `package main
 
 import (
-	"bufio"
-	"fmt"
+{{if .IsProd}}	"embed"{{end}}
 	"html/template"
-	"io"
-	"io/fs"
 	"log"
 	"net/http"
+{{if not .IsProd -}}
+	"bufio"
+	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"strconv"
 	"strings"
-	"time"
+	"time"{{end}}
 	{{range $alias, $package := .Imports}}
 	{{$alias}} "{{$package}}"{{end}}
 )
 
-{{if not .IsProd}}
+{{if .IsProd}}
+//go:embed static/*
+var staticFS embed.FS
+{{else}}
 type esbuildFS struct {
 	files map[string][]byte
 }
@@ -169,8 +174,7 @@ func hmr(ch chan string) http.Handler {
 
 func renderHandler(root string, templates []string, render func(*template.Template, http.ResponseWriter, *http.Request) error) http.Handler {
 	{{if .IsProd -}}
-	fs := os.DirFS(root)
-	t := template.Must(template.ParseFS(fs, templates...)){{end}}
+	t := template.Must(template.ParseFS(staticFS, templates...)){{end}}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		{{if not .IsProd -}}
 		fs := os.DirFS("{{.Root}}" + root)
@@ -189,7 +193,11 @@ func main() {
 	{{with $render := $handler.Render}}mux.Handle("{{$render.Pattern}}", renderHandler("{{$render.Root}}", []string{ {{- range $render.Templates}}"{{.}}", {{end -}} }, {{$handler.Package}}.{{$render.Handler}})){{end}}
 	{{range $handler.Rest}}mux.HandleFunc("{{.Pattern}}", {{$handler.Package}}.{{.Handler}}){{end}}
 	{{end}}
-	{{if not .IsProd}}
+
+	// nova
+	{{- if .IsProd}}
+	mux.Handle("/static/", http.FileServerFS(staticFS))
+	{{else}}
 	ch := make(chan string, 16)
 	fsys := &esbuildFS{files: make(map[string][]byte)}
 	go esbuildScanner(fsys, ch)
