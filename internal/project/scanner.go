@@ -50,6 +50,12 @@ func (p *scanner) scan() error {
 func (p *scanner) findFiles(base string) error {
 	pages := module.Abs(filepath.FromSlash(base))
 
+	p.goFiles = []string{}
+	p.jsFiles = []string{}
+	p.cssFiles = []string{}
+	p.htmlFiles = []string{}
+	p.assetFiles = []string{}
+
 	err := filepath.WalkDir(pages, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -96,6 +102,7 @@ func (p *scanner) linkFiles() error {
 		linkedFiles[filename] = imports
 	}
 
+	p.templateFiles = []string{}
 	html := slices.Concat(slices.Collect(maps.Values(linkedFiles))...)
 	for _, filename := range html {
 		if filepath.Ext(filename) == ".html" {
@@ -115,7 +122,7 @@ func (p *scanner) linkFiles() error {
 }
 
 func (p *scanner) findPageFiles() error {
-	p.pages = append(p.pages, p.goFiles...)
+	p.pages = slices.Clone(p.goFiles)
 
 	type void struct{}
 	templates := map[string]void{}
