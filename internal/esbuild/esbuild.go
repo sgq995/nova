@@ -156,7 +156,7 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 		Outdir:              module.Abs(filepath.Join("node_modules", ".nova")),
 		Format:              api.FormatESModule,
 		MinifyWhitespace:    true,
-		MinifyIdentifiers:   false,
+		MinifyIdentifiers:   true,
 		MinifySyntax:        true,
 	})
 

@@ -69,7 +69,7 @@ func (p *scanner) findFiles(base string) error {
 		case ".go":
 			p.goFiles = append(p.goFiles, path)
 
-		case ".js", ".mjs", ".jsx", ".mjsx", ".ts", ".tsx":
+		case ".js", ".ts":
 			p.jsFiles = append(p.jsFiles, path)
 
 		case ".css":

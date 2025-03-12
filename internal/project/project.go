@@ -109,7 +109,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 
 			runner.restart(files)
 		},
-		"*.js,*.jsx,*.ts,*.tsx,*.css": func(filename string) {
+		"*.js,*.ts,*.css": func(filename string) {
 			// TODO: buffer for files added/modified in error state
 			logger.Infof("change (%s)", filename)
 
