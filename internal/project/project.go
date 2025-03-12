@@ -60,7 +60,6 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 
 	logger.Infof("starting nova dev server...")
 	if err := rebuild(scanner, router, codegen); err != nil {
-		logger.Errorf("%+v", err)
 		return nil, err
 	}
 
@@ -76,7 +75,6 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 
 	staticFiles, err := esbuildCtx.Build()
 	if err != nil {
-		logger.Errorf("%+v", err)
 		return nil, err
 	}
 
@@ -88,11 +86,16 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	}
 
 	runner.start(files)
-	logger.Infof("http://%s:%d", p.config.Server.Host, p.config.Server.Port)
 
 	watcher := newWatcher(ctx, map[string]func(string){
 		"*.go": func(filename string) {
-			rebuild(server.scanner, server.router, server.codegen)
+			logger.Infof("change (%s)", filename)
+
+			err := rebuild(server.scanner, server.router, server.codegen)
+			if err != nil {
+				logger.Errorf("%+v", err)
+				return
+			}
 
 			files := map[string][]byte{
 				filename:       {},
@@ -105,12 +108,13 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 			}
 
 			runner.restart(files)
-
-			logger.Infof("[reload]", filename)
 		},
-		"*.js,*.jsx,*.ts,*.tsx,*.css": func(name string) {
+		"*.js,*.jsx,*.ts,*.tsx,*.css": func(filename string) {
+			// TODO: buffer for files added/modified in error state
+			logger.Infof("change (%s)", filename)
+
 			root := module.Abs(p.config.Router.Pages)
-			in, _ := filepath.Rel(root, name)
+			in, _ := filepath.Rel(root, filename)
 			out := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static", in))
 			files, err := server.esbuild.Build()
 			if err != nil {
@@ -118,14 +122,13 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 				return
 			}
 			if contents, exists := files[out]; exists {
-				logger.Infof("[reload]", name)
 				runner.update(in, contents)
 			} else {
 				server.esbuild.Dispose()
 
 				err := scanner.scan()
 				if err != nil {
-					logger.Infof("[scanner]", err)
+					logger.Errorf("%+v", err)
 					return
 				}
 
@@ -139,9 +142,9 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 				runner.update(in, files[out])
 			}
 		},
-		"*.html": func(name string) {
-			logger.Infof("[reload]", name)
-			runner.update(name, []byte{})
+		"*.html": func(filename string) {
+			logger.Infof("change (%s)", filename)
+			runner.update(filename, []byte{})
 		},
 	})
 	go watcher.watch(p.config.Router.Pages)

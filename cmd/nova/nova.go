@@ -23,10 +23,7 @@ func dev(c config.Config) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	server, err := nova.Serve(ctx)
-	if err != nil {
-		return
-	}
+	server := utils.Must(nova.Serve(ctx))
 	defer server.Dispose()
 
 	sig := make(chan os.Signal, 1)
@@ -45,10 +42,11 @@ func build(c config.Config) {
 	nova := utils.Must(project.Context(c))
 	err := nova.Build()
 	if err != nil {
+		logger.Errorf("%+v", err)
 		return
 	}
 
-	logger.Infof("[build] go build -o .nova/app")
+	logger.Infof("starting go compiler")
 	in := filepath.Join(module.Root(), c.Codegen.OutDir, "main.go")
 	out := filepath.Join(module.Root(), c.Codegen.OutDir, "app")
 	cmd := exec.Command("go", "build", "-o", out, in)
@@ -62,7 +60,7 @@ func build(c config.Config) {
 		return
 	}
 
-	logger.Infof("[build] done")
+	logger.Infof("success (%s)", out)
 }
 
 func help() {
