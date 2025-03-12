@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/sgq995/nova/internal/config"
+	"github.com/sgq995/nova/internal/logger"
 	"github.com/sgq995/nova/internal/module"
 	"github.com/sgq995/nova/internal/parser"
 )
@@ -47,6 +48,7 @@ func parseGoFile(c *config.RouterConfig, filename string) ([]Route, error) {
 				Templates: templates,
 				Handler:   h,
 			})
+			logger.Infof("RENDER %s (%s)", routePath, filename)
 
 		case http.MethodConnect, http.MethodDelete, http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodPatch, http.MethodPost, http.MethodPut, http.MethodTrace:
 			routePath = path.Join(c.APIBase, routePath)
@@ -55,6 +57,7 @@ func parseGoFile(c *config.RouterConfig, filename string) ([]Route, error) {
 				Pattern: method + " " + routePath,
 				Handler: h,
 			})
+			logger.Infof("%s %s (%s)", method, routePath, filename)
 		}
 	}
 

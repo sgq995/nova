@@ -4,13 +4,13 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"syscall"
 
 	"github.com/sgq995/nova/internal/config"
+	"github.com/sgq995/nova/internal/logger"
 	"github.com/sgq995/nova/internal/module"
 )
 
@@ -67,7 +67,7 @@ func (r *runner) restart(files map[string][]byte) {
 }
 
 func (r *runner) update(name string, contents []byte) error {
-	log.Println("[runner]", name)
+	logger.Debugf("[UPDATE] %s", name)
 	writer := bufio.NewWriter(r.stdin)
 	command := fmt.Sprintf("UPDATE %s %d\n", name, len(contents))
 	_, err := writer.WriteString(command)

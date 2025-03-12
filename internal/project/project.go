@@ -193,21 +193,14 @@ func (p *projectContextImpl) Build() error {
 		EntryMap:    staticEntryMap,
 	})
 
-	if err := rebuild(s, r, c); err != nil {
+	routes, err := r.ParseRoutes(s.pages)
+	if err != nil {
 		return err
 	}
-
-	// build
-	// files := Scan(c.Pages)
-	// link with file handlers,
-	// html will search for script and link,
-	// js and css are automatically link by esbuild
-	// assets will only be referenced
-	// Link(files)
-	// Bundle()
-	// CreateRouter()
-	// Execute(mainTemplate)
-	// Build()
+	err = c.Generate(routes)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
