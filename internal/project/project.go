@@ -3,7 +3,6 @@ package project
 import (
 	"context"
 	_ "embed"
-	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,6 +10,7 @@ import (
 	"github.com/sgq995/nova/internal/codegen"
 	"github.com/sgq995/nova/internal/config"
 	"github.com/sgq995/nova/internal/esbuild"
+	"github.com/sgq995/nova/internal/logger"
 	"github.com/sgq995/nova/internal/module"
 	"github.com/sgq995/nova/internal/router"
 )
@@ -58,7 +58,11 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	codegen := codegen.NewCodegen(p.config)
 	runner := newRunner(p.config)
 
-	rebuild(scanner, router, codegen)
+	logger.Infof("starting nova dev server...")
+	if err := rebuild(scanner, router, codegen); err != nil {
+		logger.Errorf("%+v", err)
+		return nil, err
+	}
 
 	static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
 	esbuildCtx := esbuild.Context(static)
@@ -72,6 +76,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 
 	staticFiles, err := esbuildCtx.Build()
 	if err != nil {
+		logger.Errorf("%+v", err)
 		return nil, err
 	}
 
@@ -83,6 +88,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	}
 
 	runner.start(files)
+	logger.Infof("http://%s:%d", p.config.Server.Host, p.config.Server.Port)
 
 	watcher := newWatcher(ctx, map[string]func(string){
 		"*.go": func(filename string) {
@@ -100,7 +106,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 
 			runner.restart(files)
 
-			log.Println("[reload]", filename)
+			logger.Infof("[reload]", filename)
 		},
 		"*.js,*.jsx,*.ts,*.tsx,*.css": func(name string) {
 			root := module.Abs(p.config.Router.Pages)
@@ -108,18 +114,18 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 			out := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static", in))
 			files, err := server.esbuild.Build()
 			if err != nil {
-				log.Println("[esbuild]", err)
+				logger.Errorf("%+v", err)
 				return
 			}
 			if contents, exists := files[out]; exists {
-				log.Println("[reload]", name)
+				logger.Infof("[reload]", name)
 				runner.update(in, contents)
 			} else {
 				server.esbuild.Dispose()
 
 				err := scanner.scan()
 				if err != nil {
-					log.Println("[scanner]", err)
+					logger.Infof("[scanner]", err)
 					return
 				}
 
@@ -127,14 +133,14 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 				server.esbuild = esbuild.Context(static)
 				files, err := server.esbuild.Build()
 				if err != nil {
-					log.Println("[esbuild]", err)
+					logger.Errorf("%+v", err)
 					return
 				}
 				runner.update(in, files[out])
 			}
 		},
 		"*.html": func(name string) {
-			log.Println("[reload]", name)
+			logger.Infof("[reload]", name)
 			runner.update(name, []byte{})
 		},
 	})

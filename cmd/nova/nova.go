@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -12,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/sgq995/nova/internal/config"
+	"github.com/sgq995/nova/internal/logger"
 	"github.com/sgq995/nova/internal/module"
 	"github.com/sgq995/nova/internal/project"
 	"github.com/sgq995/nova/internal/utils"
@@ -25,7 +25,7 @@ func dev(c config.Config) {
 
 	server, err := nova.Serve(ctx)
 	if err != nil {
-		log.Fatalln("fatal", err)
+		return
 	}
 	defer server.Dispose()
 
@@ -38,7 +38,6 @@ func dev(c config.Config) {
 		cancel()
 	}()
 
-	log.Printf("[nova] http://%s:%d\n", c.Server.Host, c.Server.Port)
 	<-ctx.Done()
 }
 
@@ -46,10 +45,10 @@ func build(c config.Config) {
 	nova := utils.Must(project.Context(c))
 	err := nova.Build()
 	if err != nil {
-		log.Fatalln(err)
+		return
 	}
 
-	log.Println("[build] go build -o .nova/app")
+	logger.Infof("[build] go build -o .nova/app")
 	in := filepath.Join(module.Root(), c.Codegen.OutDir, "main.go")
 	out := filepath.Join(module.Root(), c.Codegen.OutDir, "app")
 	cmd := exec.Command("go", "build", "-o", out, in)
@@ -59,10 +58,11 @@ func build(c config.Config) {
 
 	err = cmd.Run()
 	if err != nil {
-		log.Fatalln(err)
+		logger.Errorf("%+v", err)
+		return
 	}
 
-	log.Println("[build] done")
+	logger.Infof("[build] done")
 }
 
 func help() {
