@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"log"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/sgq995/nova/internal/config"
+	"github.com/sgq995/nova/internal/logger"
 	"github.com/sgq995/nova/internal/module"
 	"github.com/sgq995/nova/internal/utils"
 	"github.com/tdewolff/minify/v2"
@@ -23,7 +24,8 @@ import (
 func esbuildError(messages []api.Message) error {
 	errs := []error{}
 	for _, msg := range messages {
-		errs = append(errs, errors.New(msg.Text))
+		text := fmt.Sprintf("%s:%d: %s", msg.Location.File, msg.Location.Line, msg.Text)
+		errs = append(errs, errors.New(text))
 	}
 	return errors.Join(errs...)
 }
@@ -42,10 +44,14 @@ type esbuildContextImpl struct {
 func (ctx *esbuildContextImpl) Build() (map[string][]byte, error) {
 	result := ctx.nodeModules.Rebuild()
 	if len(result.Errors) > 0 {
-
+		return nil, esbuildError(result.Errors)
 	}
 
 	result = ctx.app.Rebuild()
+	if len(result.Errors) > 0 {
+		return nil, esbuildError(result.Errors)
+	}
+
 	files := map[string][]byte{}
 	for _, f := range result.OutputFiles {
 		files[f.Path] = f.Contents
@@ -128,12 +134,12 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 		},
 	})
 	if ctxErr != nil {
-		log.Fatalln(ctxErr)
+		logger.Errorf("%+v", ctxErr)
 	}
 
 	result := appCtx.Rebuild()
 	if len(result.Errors) > 0 {
-		log.Fatalln(esbuildError(result.Errors))
+		logger.Errorf("%+v", esbuildError(result.Errors))
 	}
 
 	nodeModulesEntries := []api.EntryPoint{}
@@ -156,7 +162,7 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 
 	result = nodeModulesCtx.Rebuild()
 	if len(result.Errors) > 0 {
-		log.Fatalln(esbuildError(result.Errors))
+		logger.Errorf("%+v", esbuildError(result.Errors))
 	}
 
 	return &esbuildContextImpl{
