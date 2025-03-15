@@ -74,7 +74,7 @@ func NewESBuild(c *config.Config) *ESBuild {
 }
 
 func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
-	outDir := module.Abs(filepath.Join(esbuild.config.Codegen.OutDir, "static"))
+	outDir := module.Join(esbuild.config.Codegen.OutDir, "static")
 
 	nodeModules := map[string]string{}
 	appCtx, ctxErr := api.Context(api.BuildOptions{
@@ -92,7 +92,7 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 				Name: "nova-node_modules",
 				Setup: func(pb api.PluginBuild) {
 					pb.OnResolve(api.OnResolveOptions{Filter: "^[^./]"}, func(ora api.OnResolveArgs) (api.OnResolveResult, error) {
-						packagepath := module.Abs(filepath.Join("node_modules", ora.Path))
+						packagepath := module.Join("node_modules", ora.Path)
 						_, err := os.Stat(packagepath)
 						switch {
 						case err == os.ErrNotExist:
@@ -155,12 +155,15 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 		EntryPointsAdvanced: nodeModulesEntries,
 		Bundle:              true,
 		Write:               true,
-		Outdir:              module.Abs(filepath.Join("node_modules", ".nova")),
+		Outdir:              module.Join("node_modules", ".nova"),
 		Format:              api.FormatESModule,
 		MinifyWhitespace:    true,
 		MinifyIdentifiers:   true,
 		MinifySyntax:        true,
 	})
+	if ctxErr != nil {
+		logger.Errorf("%+v", ctxErr)
+	}
 
 	result = nodeModulesCtx.Rebuild()
 	if len(result.Errors) > 0 {
@@ -183,7 +186,7 @@ type BuildOptions struct {
 func (esbuild *ESBuild) Build(options BuildOptions) (map[string]string, error) {
 	pages := module.Abs(esbuild.config.Router.Pages)
 	entryNames := "[dir]/[name].[hash]"
-	if options.Hashing == false {
+	if !options.Hashing {
 		entryNames = "[dir]/[name]"
 	}
 
@@ -207,7 +210,7 @@ func (esbuild *ESBuild) Build(options BuildOptions) (map[string]string, error) {
 				Name: "nova-metafile",
 				Setup: func(pb api.PluginBuild) {
 					pb.OnEnd(func(result *api.BuildResult) (api.OnEndResult, error) {
-						err := os.WriteFile(module.Abs(filepath.Join(esbuild.config.Codegen.OutDir, "metafile.json")), []byte(result.Metafile), 0755)
+						err := os.WriteFile(module.Join(esbuild.config.Codegen.OutDir, "metafile.json"), []byte(result.Metafile), 0755)
 						return api.OnEndResult{}, err
 					})
 				},

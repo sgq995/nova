@@ -127,7 +127,7 @@ func generateMain(c *config.Config, files map[string][]router.Route) error {
 		"Handlers":    handlers,
 		"Host":        c.Server.Host,
 		"Port":        c.Server.Port,
-		"NodeModules": module.Abs(filepath.Join("node_modules", ".nova")),
+		"NodeModules": module.Join("node_modules", ".nova"),
 	}))
 
 	return errors.Join(errs...)

@@ -79,7 +79,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	}
 
 	files := map[string][]byte{"@nova/hmr.js": hmr}
-	root := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static"))
+	root := module.Join(p.config.Codegen.OutDir, "static")
 	for filename, contents := range staticFiles {
 		name, _ := filepath.Rel(root, filename)
 		files[name] = contents
@@ -126,7 +126,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 					filename:       {},
 					"@nova/hmr.js": hmr,
 				}
-				root := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static"))
+				root := module.Join(p.config.Codegen.OutDir, "static")
 				for filename, contents := range staticFiles {
 					name, _ := filepath.Rel(root, filename)
 					files[name] = contents
@@ -141,7 +141,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 
 			root := module.Abs(p.config.Router.Pages)
 			in, _ := filepath.Rel(root, filename)
-			out := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static", in))
+			out := module.Join(p.config.Codegen.OutDir, "static", in)
 			files, err := server.esbuild.Build()
 			if err != nil {
 				logger.Errorf("%+v", err)
@@ -191,7 +191,7 @@ func (p *projectContextImpl) Build() error {
 	}
 
 	static := slices.Concat(s.jsFiles, s.cssFiles)
-	staticDir := module.Abs(filepath.Join(p.config.Codegen.OutDir, "static"))
+	staticDir := module.Join(p.config.Codegen.OutDir, "static")
 	staticEntryMap, err := e.Build(esbuild.BuildOptions{
 		EntryPoints: static,
 		Outdir:      staticDir,
@@ -202,12 +202,15 @@ func (p *projectContextImpl) Build() error {
 	}
 
 	templates := s.templateFiles
-	templatesDir := module.Abs(filepath.Join(p.config.Codegen.OutDir, "templates"))
+	templatesDir := module.Join(p.config.Codegen.OutDir, "templates")
 	_, err = e.Build(esbuild.BuildOptions{
 		EntryPoints: templates,
 		Outdir:      templatesDir,
 		EntryMap:    staticEntryMap,
 	})
+	if err != nil {
+		return err
+	}
 
 	pages := []string{}
 	for _, page := range s.htmlFiles {
@@ -215,12 +218,15 @@ func (p *projectContextImpl) Build() error {
 			pages = append(pages, page)
 		}
 	}
-	pagesDir := module.Abs(filepath.Join(p.config.Codegen.OutDir, "pages"))
+	pagesDir := module.Join(p.config.Codegen.OutDir, "pages")
 	_, err = e.Build(esbuild.BuildOptions{
 		EntryPoints: pages,
 		Outdir:      pagesDir,
 		EntryMap:    staticEntryMap,
 	})
+	if err != nil {
+		return err
+	}
 
 	routes, err := r.ParseRoutes(s.pages)
 	if err != nil {

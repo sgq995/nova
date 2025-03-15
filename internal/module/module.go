@@ -64,11 +64,14 @@ func ModuleName() string {
 	return modName
 }
 
-func Abs(dir string) string {
-	target := dir
-	if !filepath.IsAbs(target) {
-		target = filepath.Join(root, dir)
+func Abs(path string) string {
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path)
 	}
+	return Join(path)
+}
 
-	return target
+func Join(elem ...string) string {
+	sub := filepath.Join(elem...)
+	return filepath.Join(root, sub)
 }
