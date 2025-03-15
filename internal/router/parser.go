@@ -18,7 +18,7 @@ func parseGoFile(c *config.RouterConfig, filename string) ([]Route, error) {
 		return nil, err
 	}
 
-	pagespath := module.Abs(filepath.FromSlash(c.Pages))
+	pagespath := module.Abs(c.Pages)
 	basepath, _ := filepath.Rel(pagespath, filepath.Dir(filename))
 
 	templates, err := parser.ParseImportsGo(filename)

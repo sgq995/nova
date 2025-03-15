@@ -48,7 +48,7 @@ func (p *scanner) scan() error {
 }
 
 func (p *scanner) findFiles(base string) error {
-	pages := module.Abs(filepath.FromSlash(base))
+	pages := module.Abs(base)
 
 	p.goFiles = []string{}
 	p.jsFiles = []string{}

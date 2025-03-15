@@ -62,7 +62,7 @@ func generateMain(c *config.Config, files map[string][]router.Route) error {
 	}
 
 	isProd := os.Getenv("NOVA_ENV") == "production"
-	pagespath := module.Abs(filepath.FromSlash(c.Router.Pages))
+	pagespath := module.Abs(c.Router.Pages)
 	outDir := filepath.Join(module.Root(), c.Codegen.OutDir)
 
 	errs := []error{}

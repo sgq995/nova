@@ -1,12 +1,14 @@
 package config
 
+import "path/filepath"
+
 type CodegenConfig struct {
 	OutDir string // relative path to the output directory, it defaults to ".nova"
 }
 
 func defaultCodegenConfig() CodegenConfig {
 	return CodegenConfig{
-		OutDir: ".nova",
+		OutDir: filepath.FromSlash(".nova"),
 	}
 }
 
@@ -27,7 +29,7 @@ func transformCodegenConfigFile(ccf *codegenConfigFile) CodegenConfig {
 
 	var outDir string
 	if ccf.outDir != nil {
-		outDir = *ccf.outDir
+		outDir = filepath.FromSlash(*ccf.outDir)
 	}
 
 	return CodegenConfig{

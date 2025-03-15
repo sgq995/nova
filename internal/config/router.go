@@ -1,5 +1,7 @@
 package config
 
+import "path/filepath"
+
 type RouterConfig struct {
 	Pages   string // relative path to pages dir, it defaults to "src/pages"
 	APIBase string // base path for rest routes, it defaults to "/api"
@@ -7,7 +9,7 @@ type RouterConfig struct {
 
 func defaultRouterConfig() RouterConfig {
 	return RouterConfig{
-		Pages:   "src/pages",
+		Pages:   filepath.FromSlash("src/pages"),
 		APIBase: "/api",
 	}
 }
@@ -34,7 +36,7 @@ func transformRouterConfigFile(rcf *routerConfigFile) RouterConfig {
 
 	var pages string
 	if rcf.Pages != nil {
-		pages = *rcf.Pages
+		pages = filepath.FromSlash(*rcf.Pages)
 	}
 
 	var apiBase string
