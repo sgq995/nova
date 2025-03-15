@@ -13,6 +13,7 @@ import (
 	"github.com/sgq995/nova/internal/logger"
 	"github.com/sgq995/nova/internal/module"
 	"github.com/sgq995/nova/internal/router"
+	"github.com/sgq995/nova/internal/watcher"
 )
 
 //go:embed hmr.js
@@ -89,7 +90,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 		logger.Errorf("%+v", err)
 	}
 
-	watcher := newWatcher(ctx, map[string]func(string){
+	go watcher.WatchDir(ctx, p.config.Router.Pages, map[string]func(string){
 		"*.go": func(filename string) {
 			logger.Infof("change (%s)", filename)
 
@@ -173,7 +174,6 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 			runner.update(filename, []byte{})
 		},
 	})
-	go watcher.watch(p.config.Router.Pages)
 
 	return server, nil
 }

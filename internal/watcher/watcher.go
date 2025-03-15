@@ -1,4 +1,4 @@
-package project
+package watcher
 
 import (
 	"context"
@@ -13,22 +13,20 @@ import (
 )
 
 type watcher struct {
-	ctx       context.Context
-	callbacks map[string]func(string)
-	fileInfo  map[string]time.Time
+	ctx      context.Context
+	fileInfo map[string]time.Time
 }
 
-func newWatcher(ctx context.Context, callbacks map[string]func(string)) *watcher {
+func new(ctx context.Context) *watcher {
 	return &watcher{
-		ctx:       ctx,
-		callbacks: callbacks,
-		fileInfo:  make(map[string]time.Time),
+		ctx:      ctx,
+		fileInfo: make(map[string]time.Time),
 	}
 }
 
-func (w *watcher) watch(dir string) {
+func WatchDir(ctx context.Context, dir string, callbacks map[string]func(string)) {
 	target := module.Abs(dir)
-
+	fileInfo := make(map[string]time.Time)
 	for {
 		err := filepath.WalkDir(target, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -41,7 +39,7 @@ func (w *watcher) watch(dir string) {
 
 			name := filepath.Base(path)
 			matches := []string{}
-			for matcher := range w.callbacks {
+			for matcher := range callbacks {
 				patterns := strings.Split(matcher, ",")
 				for _, pattern := range patterns {
 					if matched := utils.Must(filepath.Match(pattern, name)); matched {
@@ -60,13 +58,13 @@ func (w *watcher) watch(dir string) {
 			}
 
 			modTime := info.ModTime()
-			if lastModTime, exists := w.fileInfo[path]; exists && modTime.After(lastModTime) {
+			if lastModTime, exists := fileInfo[path]; exists && modTime.After(lastModTime) {
 				for _, matcher := range matches {
-					cb := w.callbacks[matcher]
+					cb := callbacks[matcher]
 					cb(path)
 				}
 			}
-			w.fileInfo[path] = modTime
+			fileInfo[path] = modTime
 
 			return nil
 		})
@@ -78,7 +76,7 @@ func (w *watcher) watch(dir string) {
 		time.Sleep(1 * time.Second)
 
 		select {
-		case <-w.ctx.Done():
+		case <-ctx.Done():
 			return
 
 		default:
