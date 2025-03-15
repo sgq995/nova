@@ -23,7 +23,6 @@ import (
 {{- if .IsProd}}
 	"html/template"
 	"embed"
-	"path"
 {{- else}}
 	"bufio"
 	"bytes"
