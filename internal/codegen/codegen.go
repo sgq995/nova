@@ -452,11 +452,11 @@ const mainHMRTmpl string = `package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"html/template"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	
 	{{.Alias}} "{{.Package}}"
 )
@@ -537,16 +537,13 @@ func (w *responseWriter) Header() http.Header {
 }
 
 func (w *responseWriter) Write(b []byte) (int, error) {
-	fmt.Printf("Write")
 	if !w.wroteHeader {
-		fmt.Printf("Write -> WriteHeader")
 		w.WriteHeader(http.StatusOK)
 	}
 	return os.Stdout.Write(b)
 }
 
 func (w *responseWriter) WriteHeader(statusCode int) {
-	fmt.Printf("WriteHeader")
 	w.wroteHeader = true
 	w.StatusCode = statusCode
 	json.NewEncoder(os.Stdout).Encode(w)
@@ -554,7 +551,7 @@ func (w *responseWriter) WriteHeader(statusCode int) {
 
 func renderHandler(root string, templates []string, render func(*template.Template, http.ResponseWriter, *http.Request) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fs := os.DirFS("/home/sebastian/Proyectos/Personal/nova/src/pages/" + root)
+		fs := os.DirFS(filepath.Join("{{.Root}}", root))
 		t := template.Must(template.ParseFS(fs, templates...))
 		err := render(t, w, r)
 		if err != nil {
@@ -574,8 +571,10 @@ func main() {
 	w := newResponseWriter()
 
 	mux := http.NewServeMux()
-	mux.Handle("GET /{$}", renderHandler(".", []string{"index.html", "about.html"}, pages.Render))
-	mux.HandleFunc("POST /api/{$}", pages.Post)
+	{{range $handler := .Handlers}}
+	{{with $render := .Render}}mux.Handle("{{$render.Pattern}}", renderHandler("{{$render.Root}}", []string{ {{- range $render.Templates}}"{{.}}", {{end -}} }, {{$handler.Package}}.{{$render.Handler}})){{end}}
+	{{range .Rest}}mux.HandleFunc("{{.Pattern}}", {{$handler.Package}}.{{.Handler}}){{end}}
+	{{end}}
 
 	mux.ServeHTTP(w, r)
 }
@@ -664,11 +663,12 @@ func generateMain(c *config.Config, files map[string][]router.Route) error {
 			}
 			defer file.Close()
 
-			t.Execute(file, map[string]any{
+			errs = append(errs, t.Execute(file, map[string]any{
 				"Alias":    aliases[filename],
 				"Package":  packages[filename],
+				"Root":     pagespath,
 				"Handlers": handlers,
-			})
+			}))
 		}
 	}
 
