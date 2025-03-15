@@ -177,7 +177,7 @@ func esbuildScanner(fsys *esbuildFS, ch chan string) {
 		if err != nil {
 			panic(err)
 		}
-		log.Println("[main.go]", line)
+		fmt.Println("[main.go]", line)
 
 		switch command {
 		case "UPDATE":

@@ -42,7 +42,9 @@ func (h *handler) Handle(ctx context.Context, r slog.Record) error {
 	buf = append(buf, []byte(l)...)
 	buf = append(buf, ' ')
 	buf = append(buf, []byte(r.Message)...)
-	buf = append(buf, '\n')
+	if buf[len(buf)-1] != '\n' {
+		buf = append(buf, '\n')
+	}
 
 	h.mu.Lock()
 	defer h.mu.Unlock()

@@ -85,7 +85,9 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 		files[name] = contents
 	}
 
-	runner.start(files)
+	if err := runner.start(files); err != nil {
+		logger.Errorf("%+v", err)
+	}
 
 	watcher := newWatcher(ctx, map[string]func(string){
 		"*.go": func(filename string) {

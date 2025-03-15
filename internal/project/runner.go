@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/sgq995/nova/internal/config"
 	"github.com/sgq995/nova/internal/logger"
@@ -20,6 +22,9 @@ type runner struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
 	stdout io.ReadCloser
+	stderr io.ReadCloser
+
+	wg sync.WaitGroup
 }
 
 func newRunner(c *config.Config) *runner {
@@ -30,8 +35,6 @@ func (r *runner) start(files map[string][]byte) error {
 	main := filepath.Join(module.Root(), r.config.Codegen.OutDir, "main.go")
 	cmd := exec.Command("go", "run", main)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Stderr = nil
-	cmd.Stdout = nil
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -43,9 +46,59 @@ func (r *runner) start(files map[string][]byte) error {
 		return err
 	}
 
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+
 	r.cmd = cmd
 	r.stdin = stdin
 	r.stdout = stdout
+	r.stderr = stderr
+
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+
+		buf := make([]byte, 1024)
+		for {
+			n, err := r.stdout.Read(buf)
+			if err != nil {
+				return
+			}
+			if n > 0 {
+				logger.Debugf("%s", string(buf[:n]))
+			}
+
+			if r.cmd.ProcessState != nil {
+				return
+			}
+
+			time.Sleep(100 * time.Millisecond)
+		}
+	}()
+
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+
+		buf := make([]byte, 1024)
+		for {
+			n, err := r.stderr.Read(buf)
+			if err != nil {
+				return
+			}
+			if n > 0 {
+				logger.Errorf("%s", string(buf[:n]))
+			}
+
+			if r.cmd.ProcessState != nil {
+				return
+			}
+
+			time.Sleep(100 * time.Millisecond)
+		}
+	}()
 
 	err = r.cmd.Start()
 	if err != nil {
@@ -62,16 +115,15 @@ func (r *runner) start(files map[string][]byte) error {
 }
 
 func (r *runner) stop() {
-	r.stdin.Close()
-
 	r.cmd.Process.Signal(os.Interrupt)
 	syscall.Kill(-r.cmd.Process.Pid, syscall.SIGINT)
 	r.cmd.Wait()
+	r.wg.Wait()
 }
 
-func (r *runner) restart(files map[string][]byte) {
+func (r *runner) restart(files map[string][]byte) error {
 	r.stop()
-	r.start(files)
+	return r.start(files)
 }
 
 func (r *runner) update(name string, contents []byte) error {
