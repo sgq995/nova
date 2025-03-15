@@ -108,6 +108,8 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 							return api.OnResolveResult{}, nil
 						}
 
+						logger.Debugf("[esbuild] resolve (%s)", ora.Path)
+
 						result := pb.Resolve(ora.Path, api.ResolveOptions{
 							ResolveDir: module.Abs("node_modules"),
 							Importer:   ora.Importer,
