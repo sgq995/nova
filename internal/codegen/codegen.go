@@ -678,7 +678,12 @@ func generateMain(c *config.Config, files map[string][]router.Route) error {
 	}
 	defer file.Close()
 
-	t := template.Must(template.New("main.go").Parse(mainTmpl))
+	var t *template.Template
+	if isProd {
+		t = generateProdServerTemplate()
+	} else {
+		t = generateDevServerTemplate()
+	}
 	errs = append(errs, t.Execute(file, map[string]any{
 		"IsProd":      isProd,
 		"Imports":     imports,
