@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -32,7 +31,7 @@ func newRunner(c *config.Config) *runner {
 }
 
 func (r *runner) start(files map[string][]byte) error {
-	main := filepath.Join(module.Root(), r.config.Codegen.OutDir, "main.go")
+	main := module.Join(r.config.Codegen.OutDir, "main.go")
 	cmd := exec.Command("go", "run", main)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 

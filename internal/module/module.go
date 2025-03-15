@@ -71,6 +71,10 @@ func Abs(path string) string {
 	return Join(path)
 }
 
+func Rel(targpath string) string {
+	return utils.Must(filepath.Rel(root, targpath))
+}
+
 func Join(elem ...string) string {
 	sub := filepath.Join(elem...)
 	return filepath.Join(root, sub)

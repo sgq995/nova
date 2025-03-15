@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 
 	"github.com/sgq995/nova/internal/config"
@@ -46,14 +45,14 @@ func build(c config.Config) {
 		return
 	}
 
-	logger.Infof("starting go compiler")
-	in := filepath.Join(module.Root(), c.Codegen.OutDir, "main.go")
-	out := filepath.Join(module.Root(), c.Codegen.OutDir, "app")
+	in := module.Join(c.Codegen.OutDir, "main.go")
+	out := module.Join(c.Codegen.OutDir, "app")
 	cmd := exec.Command("go", "build", "-o", out, in)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
+	logger.Infof("go build -o %s %s", out, in)
 	err = cmd.Run()
 	if err != nil {
 		logger.Errorf("%+v", err)
@@ -71,7 +70,7 @@ func help() {
 func main() {
 	configFile := flag.String(
 		"config-file",
-		filepath.Join(module.Root(), "nova.config.json"),
+		module.Abs("nova.config.json"),
 		"A JSON config file",
 	)
 

@@ -24,7 +24,7 @@ type handler struct {
 func generateMain(c *config.Config, files map[string][]router.Route) error {
 	imports := map[string]string{}
 	handlers := map[string]handler{}
-	pages := filepath.Join(module.Root(), c.Router.Pages)
+	pages := module.Abs(c.Router.Pages)
 	for filename, routes := range files {
 		if len(routes) == 0 {
 			continue
@@ -34,7 +34,7 @@ func generateMain(c *config.Config, files map[string][]router.Route) error {
 			continue
 		}
 
-		base, _ := filepath.Rel(module.Root(), filepath.Dir(filename))
+		base := module.Rel(filepath.Dir(filename))
 		base = filepath.ToSlash(base)
 		alias := strings.ReplaceAll(base, "/", "")
 		pkg := path.Join(module.ModuleName(), base)
@@ -63,7 +63,7 @@ func generateMain(c *config.Config, files map[string][]router.Route) error {
 
 	isProd := os.Getenv("NOVA_ENV") == "production"
 	pagespath := module.Abs(c.Router.Pages)
-	outDir := filepath.Join(module.Root(), c.Codegen.OutDir)
+	outDir := module.Abs(c.Codegen.OutDir)
 
 	errs := []error{}
 	if !isProd {
@@ -71,7 +71,7 @@ func generateMain(c *config.Config, files map[string][]router.Route) error {
 		aliases := map[string]string{}
 		packages := map[string]string{}
 		for filename, handler := range handlers {
-			base := utils.Must(filepath.Rel(module.Root(), filepath.Dir(filename)))
+			base := module.Rel(filepath.Dir(filename))
 			base = filepath.ToSlash(base)
 			alias := strings.ReplaceAll(base, "/", "")
 			pkg := path.Join(module.ModuleName(), base)
@@ -142,7 +142,7 @@ func NewCodegen(c *config.Config) *Codegen {
 }
 
 func (c *Codegen) Generate(files map[string][]router.Route) error {
-	outDir := filepath.Join(module.Root(), c.config.Codegen.OutDir)
+	outDir := module.Abs(c.config.Codegen.OutDir)
 	err := os.MkdirAll(outDir, 0755)
 	if err != nil {
 		return err
