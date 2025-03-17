@@ -2,84 +2,118 @@ package watcher
 
 import (
 	"context"
-	"io/fs"
-	"log"
-	"path/filepath"
-	"strings"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/sgq995/nova/internal/module"
-	"github.com/sgq995/nova/internal/utils"
 )
 
-type watcher struct {
-	ctx      context.Context
-	fileInfo map[string]time.Time
-}
+func dispatchFunc(files []string, match func(string) []Callback, execute func(cb Callback, filename string) error) {
+	for _, filename := range files {
+		matches := match(filename)
+		if len(matches) == 0 {
+			continue
+		}
 
-func new(ctx context.Context) *watcher {
-	return &watcher{
-		ctx:      ctx,
-		fileInfo: make(map[string]time.Time),
+		for _, cb := range matches {
+			// TODO: verify if WaitGroup is needed
+			go execute(cb, filename)
+		}
 	}
 }
 
-func WatchDir(ctx context.Context, dir string, callbacks map[string]func(string)) {
-	target := module.Abs(dir)
-	fileInfo := make(map[string]time.Time)
-	for {
-		err := filepath.WalkDir(target, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-
-			if d.IsDir() {
-				return nil
-			}
-
-			name := filepath.Base(path)
-			matches := []string{}
-			for matcher := range callbacks {
-				patterns := strings.Split(matcher, ",")
-				for _, pattern := range patterns {
-					if matched := utils.Must(filepath.Match(pattern, name)); matched {
-						matches = append(matches, matcher)
-					}
-				}
-			}
-
-			if len(matches) == 0 {
-				return nil
-			}
-
-			info, err := d.Info()
-			if err != nil {
-				return err
-			}
-
-			modTime := info.ModTime()
-			if lastModTime, exists := fileInfo[path]; exists && modTime.After(lastModTime) {
-				for _, matcher := range matches {
-					cb := callbacks[matcher]
-					cb(path)
-				}
-			}
-			fileInfo[path] = modTime
-
+func dispatch(files *fileEvents, callbacks CallbackMap) {
+	dispatchFunc(files.created, callbacks.match, func(cb Callback, filename string) error {
+		if cb.OnCreate == nil {
 			return nil
-		})
-
-		if err != nil {
-			log.Fatalln(err)
 		}
+		return cb.OnCreate(filename)
+	})
 
-		time.Sleep(1 * time.Second)
+	dispatchFunc(files.updated, callbacks.match, func(cb Callback, filename string) error {
+		if cb.OnUpdate == nil {
+			return nil
+		}
+		return cb.OnUpdate(filename)
+	})
 
+	dispatchFunc(files.deleted, callbacks.match, func(cb Callback, filename string) error {
+		if cb.OnDelete == nil {
+			return nil
+		}
+		return cb.OnDelete(filename)
+	})
+}
+
+func WatchDir(ctx context.Context, dir string, callbacks CallbackMap) error {
+	root := module.Abs(dir)
+	files := map[string]time.Time{}
+
+	// TODO: config scan time
+	filesTicker := time.NewTicker(250 * time.Millisecond)
+	defer filesTicker.Stop()
+
+	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
+
+		case <-filesTicker.C:
+			newFiles, err := findFiles(root)
+			if err != nil {
+				return err
+			}
+			events := diff(files, newFiles)
+			dispatch(events, callbacks)
 
 		default:
+			paths := slices.Collect(maps.Keys(files))
+			newFiles, err := checkFiles(paths)
+			if err != nil {
+				return err
+			}
+			events := diff(files, newFiles)
+			dispatch(events, callbacks)
+			// TODO: config
+			time.Sleep(250 * time.Millisecond)
 		}
 	}
+
+	// err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	if d.IsDir() {
+	// 		return nil
+	// 	}
+
+	// 	matches := callbacks.match(path)
+	// 	if len(matches) == 0 {
+	// 		return nil
+	// 	}
+
+	// 	info, err := d.Info()
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	modTime := info.ModTime()
+	// 	lastModTime, exists := fileInfo[path]
+	// 	switch {
+	// 	case exists && modTime.After(lastModTime):
+	// 		for _, cb := range matches {
+	// 			cb.OnUpdate(path)
+	// 		}
+
+	// 	case !exists:
+	// 		for _, cb := range matches {
+	// 			cb.OnCreate(path)
+	// 		}
+	// 	}
+	// 	fileInfo[path] = modTime
+
+	// 	return nil
+	// })
 }

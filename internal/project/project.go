@@ -90,88 +90,99 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 		logger.Errorf("%+v", err)
 	}
 
-	go watcher.WatchDir(ctx, p.config.Router.Pages, map[string]func(string){
-		"*.go": func(filename string) {
-			logger.Infof("change (%s)", filename)
+	go watcher.WatchDir(ctx, p.config.Router.Pages, watcher.CallbackMap{
+		"*.go": {
+			OnUpdate: func(filename string) error {
+				logger.Infof("change (%s)", filename)
 
-			// NOTE: HMR for go files only works for existing handlers by using current
-			// templates. The templates either should be update with a custom handler
-			// for development to read filesystem finding main.go or a router.json should
-			// keep all the routes and their files.
+				// NOTE: HMR for go files only works for existing handlers by using current
+				// templates. The templates either should be update with a custom handler
+				// for development to read filesystem finding main.go or a router.json should
+				// keep all the routes and their files.
 
-			// NOTE: .nova/router.json seems to be the best approach as it holds
-			// up to date information for every path and the development mux can
-			// lookup first this file and fallback to filesystem. We should split then
-			// the template for .nova/main.go into dev and prod files to simplify it
+				// NOTE: .nova/router.json seems to be the best approach as it holds
+				// up to date information for every path and the development mux can
+				// lookup first this file and fallback to filesystem. We should split then
+				// the template for .nova/main.go into dev and prod files to simplify it
 
-			// TODO: refactor to detect new handlers instead of new files
-			// BUG: if an existing file add a new handler for unexisting method
-			// the main file should be regenerated and restarted
-			updateOnly := false
-			if slices.Index(server.scanner.pages, filename) > -1 {
-				updateOnly = true
-			}
-
-			// regenerate hmr main.go files in .nova/pages
-			// TODO: optimize rebuild to only target affected main.go file
-			err := rebuild(server.scanner, server.router, server.codegen)
-			if err != nil {
-				logger.Errorf("%+v", err)
-				return
-			}
-
-			if updateOnly {
-				runner.update(filename, []byte{})
-			} else {
-				files := map[string][]byte{
-					filename:       {},
-					"@nova/hmr.js": hmr,
-				}
-				root := module.Join(p.config.Codegen.OutDir, "static")
-				for filename, contents := range staticFiles {
-					name, _ := filepath.Rel(root, filename)
-					files[name] = contents
+				// TODO: refactor to detect new handlers instead of new files
+				// BUG: if an existing file add a new handler for unexisting method
+				// the main file should be regenerated and restarted
+				updateOnly := false
+				if slices.Index(server.scanner.pages, filename) > -1 {
+					updateOnly = true
 				}
 
-				runner.restart(files)
-			}
-		},
-		"*.js,*.ts,*.css": func(filename string) {
-			// TODO: buffer for files added/modified in error state
-			logger.Infof("change (%s)", filename)
-
-			root := module.Abs(p.config.Router.Pages)
-			in, _ := filepath.Rel(root, filename)
-			out := module.Join(p.config.Codegen.OutDir, "static", in)
-			files, err := server.esbuild.Build()
-			if err != nil {
-				logger.Errorf("%+v", err)
-				return
-			}
-			if contents, exists := files[out]; exists {
-				runner.update(in, contents)
-			} else {
-				server.esbuild.Dispose()
-
-				err := scanner.scan()
+				// regenerate hmr main.go files in .nova/pages
+				// TODO: optimize rebuild to only target affected main.go file
+				err := rebuild(server.scanner, server.router, server.codegen)
 				if err != nil {
 					logger.Errorf("%+v", err)
-					return
+					return err
 				}
 
-				static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
-				server.esbuild = esbuild.Context(static)
+				if updateOnly {
+					runner.update(filename, []byte{})
+				} else {
+					files := map[string][]byte{
+						filename:       {},
+						"@nova/hmr.js": hmr,
+					}
+					root := module.Join(p.config.Codegen.OutDir, "static")
+					for filename, contents := range staticFiles {
+						name, _ := filepath.Rel(root, filename)
+						files[name] = contents
+					}
+
+					runner.restart(files)
+				}
+
+				return nil
+			},
+		},
+		"*.js,*.ts,*.css": {
+			OnUpdate: func(filename string) error {
+				// TODO: buffer for files added/modified in error state
+				logger.Infof("change (%s)", filename)
+
+				root := module.Abs(p.config.Router.Pages)
+				in, _ := filepath.Rel(root, filename)
+				out := module.Join(p.config.Codegen.OutDir, "static", in)
 				files, err := server.esbuild.Build()
 				if err != nil {
 					logger.Errorf("%+v", err)
-					return
+					return err
 				}
-				runner.update(in, files[out])
-			}
+				if contents, exists := files[out]; exists {
+					runner.update(in, contents)
+				} else {
+					server.esbuild.Dispose()
+
+					err := scanner.scan()
+					if err != nil {
+						logger.Errorf("%+v", err)
+						return err
+					}
+
+					static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
+					server.esbuild = esbuild.Context(static)
+					files, err := server.esbuild.Build()
+					if err != nil {
+						logger.Errorf("%+v", err)
+						return err
+					}
+					runner.update(in, files[out])
+				}
+
+				return nil
+			},
 		},
-		"*.html": func(filename string) {
-			logger.Infof("change (%s)", filename)
-			runner.update(filename, []byte{})
+		"*.html": {
+			OnUpdate: func(filename string) error {
+				logger.Infof("change (%s)", filename)
+				runner.update(filename, []byte{})
+				return nil
+			},
 		},
 	})
 
