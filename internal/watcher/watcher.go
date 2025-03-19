@@ -52,6 +52,7 @@ func WatchDir(ctx context.Context, dir string, callbacks CallbackMap) error {
 				return err
 			}
 			events := diff(files, newFiles)
+			files = newFiles
 			dispatch(events, callbacks)
 
 		default:
@@ -61,6 +62,7 @@ func WatchDir(ctx context.Context, dir string, callbacks CallbackMap) error {
 				return err
 			}
 			events := diff(files, newFiles)
+			files = newFiles
 			dispatch(events, callbacks)
 			// TODO: config
 			time.Sleep(250 * time.Millisecond)
