@@ -54,22 +54,22 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	os.Setenv("NOVA_ENV", "development")
 
 	scanner := newScanner(p.config)
-	esbuild := esbuild.NewESBuild(p.config)
-	router := router.NewRouter(p.config)
-	codegen := codegen.NewCodegen(p.config)
+	e := esbuild.NewESBuild(p.config)
+	r := router.NewRouter(p.config)
+	c := codegen.NewCodegen(p.config)
 	runner := newRunner(p.config)
 
 	logger.Infof("starting nova dev server...")
-	if err := rebuild(scanner, router, codegen); err != nil {
+	if err := rebuild(scanner, r, c); err != nil {
 		return nil, err
 	}
 
 	static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
-	esbuildCtx := esbuild.Context(static)
+	esbuildCtx := e.Context(static)
 	server := &serverImpl{
 		scanner: scanner,
-		router:  router,
-		codegen: codegen,
+		router:  r,
+		codegen: c,
 		runner:  runner,
 		esbuild: esbuildCtx,
 	}
@@ -93,7 +93,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	go watcher.WatchDir(ctx, p.config.Router.Pages, watcher.CallbackMap{
 		"*.go": {
 			OnUpdate: func(filename string) error {
-				logger.Infof("change (%s)", filename)
+				logger.Infof("update (%s)", filename)
 
 				// NOTE: HMR for go files only works for existing handlers by using current
 				// templates. The templates either should be update with a custom handler
@@ -108,10 +108,10 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 				// TODO: refactor to detect new handlers instead of new files
 				// BUG: if an existing file add a new handler for unexisting method
 				// the main file should be regenerated and restarted
-				updateOnly := false
-				if slices.Index(server.scanner.pages, filename) > -1 {
-					updateOnly = true
-				}
+				// updateOnly := false
+				// if slices.Index(server.scanner.pages, filename) > -1 {
+				// 	updateOnly = true
+				// }
 
 				// regenerate hmr main.go files in .nova/pages
 				// TODO: optimize rebuild to only target affected main.go file
@@ -121,21 +121,24 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 					return err
 				}
 
-				if updateOnly {
-					runner.update(filename, []byte{})
-				} else {
-					files := map[string][]byte{
-						filename:       {},
-						"@nova/hmr.js": hmr,
-					}
-					root := module.Join(p.config.Codegen.OutDir, "static")
-					for filename, contents := range staticFiles {
-						name, _ := filepath.Rel(root, filename)
-						files[name] = contents
-					}
-
-					runner.restart(files)
+				r, err := server.router.ParseRoutes(server.scanner.pages)
+				if err != nil {
+					logger.Errorf("%+v", err)
+					return err
 				}
+
+				routes := r[filename]
+				for _, route := range routes {
+					switch route := route.(type) {
+					case *router.RenderRouteGo:
+						runner.send(codegen.CreateRouteMessage(route.Pattern))
+
+					case *router.RestRouteGo:
+						runner.send(codegen.CreateRouteMessage(route.Pattern))
+					}
+				}
+
+				runner.send(codegen.UpdateFileMessage(filename, []byte{}))
 
 				return nil
 			},
@@ -154,7 +157,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 					return err
 				}
 				if contents, exists := files[out]; exists {
-					runner.update(in, contents)
+					runner.send(codegen.UpdateFileMessage(in, contents))
 				} else {
 					server.esbuild.Dispose()
 
@@ -165,13 +168,13 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 					}
 
 					static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
-					server.esbuild = esbuild.Context(static)
+					server.esbuild = e.Context(static)
 					files, err := server.esbuild.Build()
 					if err != nil {
 						logger.Errorf("%+v", err)
 						return err
 					}
-					runner.update(in, files[out])
+					runner.send(codegen.UpdateFileMessage(in, files[out]))
 				}
 
 				return nil
@@ -180,7 +183,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 		"*.html": {
 			OnUpdate: func(filename string) error {
 				logger.Infof("change (%s)", filename)
-				runner.update(filename, []byte{})
+				runner.send(codegen.UpdateFileMessage(filename, []byte{}))
 				return nil
 			},
 		},

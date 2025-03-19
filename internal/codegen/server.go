@@ -80,9 +80,9 @@ func main() {
 const mainDevTmpl string = `package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -94,19 +94,38 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
 
-type esbuildFS struct {
+type memFS struct {
+	mu    sync.Mutex
 	files map[string][]byte
 }
 
-func (fsys *esbuildFS) Open(name string) (fs.File, error) {
+func newMemFS() *memFS {
+	return &memFS{
+		files: map[string][]byte{},
+	}
+}
+
+func (fsys *memFS) update(filename string, contents []byte) {
+	fsys.mu.Lock()
+	defer fsys.mu.Unlock()
+	fmt.Printf("[main.go] update %s\n", filename)
+	fsys.files[filename] = contents
+}
+
+func (fsys *memFS) remove(filename string) {
+	fsys.mu.Lock()
+	defer fsys.mu.Unlock()
+	fmt.Printf("[main.go] remove %s\n", filename)
+	delete(fsys.files, filename)
+}
+
+func (fsys *memFS) Open(name string) (fs.File, error) {
 	if f, exists := fsys.files[name]; exists {
-		return &esbuildFile{
+		return &memFile{
 			name:     name,
 			size:     int64(len(f)),
 			contents: f,
@@ -115,124 +134,89 @@ func (fsys *esbuildFS) Open(name string) (fs.File, error) {
 	return nil, fs.ErrNotExist
 }
 
-type esbuildFile struct {
+type memFile struct {
 	name     string
 	size     int64
 	contents []byte
 }
 
-func (f *esbuildFile) Stat() (fs.FileInfo, error) {
-	return &esbuildFileInfo{
+func (f *memFile) Stat() (fs.FileInfo, error) {
+	return &memFileInfo{
 		name: f.name,
 		size: f.size,
 	}, nil
 }
 
-func (f *esbuildFile) Read(out []byte) (int, error) {
+func (f *memFile) Read(out []byte) (int, error) {
 	n := copy(out, f.contents)
 	f.contents = f.contents[n:]
 	return n, nil
 }
 
-func (f *esbuildFile) Close() error {
+func (f *memFile) Close() error {
 	return nil
 }
 
-type esbuildFileInfo struct {
+type memFileInfo struct {
 	name string
 	size int64
 }
 
-func (fi *esbuildFileInfo) Name() string {
+func (fi *memFileInfo) Name() string {
 	return fi.name
 }
 
-func (fi *esbuildFileInfo) Size() int64 {
+func (fi *memFileInfo) Size() int64 {
 	return fi.size
 }
 
-func (fi *esbuildFileInfo) Mode() fs.FileMode {
+func (fi *memFileInfo) Mode() fs.FileMode {
 	return 0755
 }
 
-func (fi *esbuildFileInfo) ModTime() time.Time {
+func (fi *memFileInfo) ModTime() time.Time {
 	return time.Now()
 }
 
-func (fi *esbuildFileInfo) IsDir() bool {
+func (fi *memFileInfo) IsDir() bool {
 	return false
 }
 
-func (fi *esbuildFileInfo) Sys() any {
+func (fi *memFileInfo) Sys() any {
 	return nil
 }
 
-func esbuildScanner(fsys *esbuildFS, ch chan string) {
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			panic(err)
-		}
-		line = strings.TrimSpace(line)
+type memRouter struct {
+	mu     sync.Mutex
+	routes map[string]struct{}
+}
 
-		parts := strings.Split(line, " ")
-		if len(parts) != 3 {
-			panic("[main.go] wrong format " + line)
-		}
-
-		command := parts[0]
-		filename := parts[1]
-		length, err := strconv.Atoi(parts[2])
-		if err != nil {
-			panic(err)
-		}
-
-		contents := make([]byte, length)
-		_, err = io.ReadFull(reader, contents)
-		if err != nil {
-			panic(err)
-		}
-		fmt.Println("[main.go]", line)
-
-		switch command {
-		case "UPDATE":
-			fsys.files[filename] = contents
-			select {
-			case ch <- filename:
-
-			default:
-			}
-		}
+func newMemRouter() *memRouter {
+	return &memRouter{
+		routes: make(map[string]struct{}),
 	}
 }
 
-func hmr(ch chan string) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
+func (mr *memRouter) add(pattern string) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	fmt.Printf("[main.go] add %s\n", pattern)
+	mr.routes[pattern] = struct{}{}
+}
 
-		rc := http.NewResponseController(w)
+func (mr *memRouter) remove(pattern string) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	fmt.Printf("[main.go] remove %s\n", pattern)
+	delete(mr.routes, pattern)
+}
 
-		ctx := r.Context()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-
-			case filename := <-ch:
-				_, err := fmt.Fprintf(w, "event: change\ndata: { \"updated\": [\"%s\"] }\n\n", filename)
-				if err != nil {
-					return
-				}
-				err = rc.Flush()
-				if err != nil {
-					return
-				}
-			}
-		}
-	})
+func (mr *memRouter) newServeMux(handler http.Handler) *http.ServeMux {
+	mux := http.NewServeMux()
+	for pattern := range mr.routes {
+		mux.Handle(pattern, handler)
+	}
+	return mux
 }
 
 type request struct {
@@ -286,162 +270,339 @@ type responseWriter struct {
 	StatusCode int         ` + "`json:\"statusCode\"`" + `
 }
 
-func hmrModule(path string) http.Handler {
-	basepath := filepath.Join("{{.OutDir}}", "pages", filepath.FromSlash(path))
-	filename := filepath.Join(basepath, "main.go")
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// var stdout bytes.Buffer
-		stdoutReader, stdoutWriter, err := os.Pipe()
-		if err != nil {
+type routeModule struct {
+	pagespath string
+}
+
+func newRouteModule(pagespath string) *routeModule {
+	return &routeModule{
+		pagespath: pagespath,
+	}
+}
+
+func (rm *routeModule) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	filename := filepath.Join(rm.pagespath, filepath.FromSlash(r.URL.Path), "main.go")
+
+	stdoutReader, stdoutWriter, err := os.Pipe()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	cmd := exec.CommandContext(r.Context(), "go", "run", filename)
+	cmd.Stdout = stdoutWriter
+	cmd.Stderr = os.Stderr
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(r.Context())
+
+	controller := http.NewResponseController(w)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		request := transformRequest(r)
+		encoder := json.NewEncoder(stdin)
+		if err := encoder.Encode(request); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		cmd := exec.CommandContext(r.Context(), "go", "run", filename)
-		cmd.Stdout = stdoutWriter
-		cmd.Stderr = os.Stderr
-
-		stdin, err := cmd.StdinPipe()
+		_, err := io.Copy(stdin, r.Body)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+	}()
 
-		var wg sync.WaitGroup
-		ctx, cancel := context.WithCancel(r.Context())
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		var header bytes.Buffer
+		var msg []byte
+		buf := make([]byte, 1024)
 
-			request := transformRequest(r)
-			encoder := json.NewEncoder(stdin)
-			if err := encoder.Encode(request); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+		for {
+			n, err := stdoutReader.Read(buf)
+			if err != nil && !errors.Is(err, io.EOF) {
 				return
 			}
-
-			_, err := io.Copy(stdin, r.Body)
-			if err != nil {
-				return
-			}
-		}()
-
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			var header bytes.Buffer
-			var msg []byte
-			buf := make([]byte, 1024)
-
-			for {
-				n, err := stdoutReader.Read(buf)
-				if err != nil && !errors.Is(err, io.EOF) {
+			if n > 0 {
+				msg = buf[:n]
+				if msg[0] != '{' {
+					http.Error(w, "bad data: "+string(msg), http.StatusInternalServerError)
 					return
 				}
-				if n > 0 {
-					msg = buf[:n]
-					if msg[0] != '{' {
-						http.Error(w, "bad data: "+string(msg), http.StatusInternalServerError)
-						return
-					}
-					var count int
-					for _, b := range msg {
-						header.WriteByte(b)
+				var count int
+				for _, b := range msg {
+					header.WriteByte(b)
 
-						if b == '{' {
-							count++
-						} else if b == '}' {
-							count--
-						} else if b == '\n' && count == 0 {
-							break
-						}
+					if b == '{' {
+						count++
+					} else if b == '}' {
+						count--
+					} else if b == '\n' && count == 0 {
+						break
 					}
-
-					break
 				}
 
+				break
+			}
+
+			time.Sleep(time.Millisecond)
+		}
+
+		body := msg[header.Len():]
+
+		var response responseWriter
+		decoder := json.NewDecoder(&header)
+		err := decoder.Decode(&response)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		maps.Copy(w.Header(), response.Headers)
+
+		if response.StatusCode != 0 {
+			w.WriteHeader(response.StatusCode)
+		}
+
+		if len(body) > 0 {
+			w.Write(body)
+		}
+
+		for {
+			n, err := stdoutReader.Read(buf)
+			if err != nil && !errors.Is(err, io.EOF) {
+				return
+			}
+			if n > 0 {
+				w.Write(buf[:n])
+				controller.Flush()
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+
+			default:
 				time.Sleep(time.Millisecond)
 			}
+		}
+	}()
 
-			body := msg[header.Len():]
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-			var response responseWriter
-			decoder := json.NewDecoder(&header)
-			err := decoder.Decode(&response)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
+		err := cmd.Start()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		cmd.Wait()
 
-			maps.Copy(w.Header(), response.Headers)
+		stdoutWriter.Close()
+		stdoutReader.Close()
 
-			if response.StatusCode != 0 {
-				w.WriteHeader(response.StatusCode)
-			}
+		cancel()
+	}()
 
-			if len(body) > 0 {
-				w.Write(body)
-			}
+	wg.Wait()
+}
 
-			for {
-				n, err := stdoutReader.Read(buf)
-				if err != nil && !errors.Is(err, io.EOF) {
-					return
-				}
-				if n > 0 {
-					w.Write(buf[:n])
-				}
+type pubSub struct {
+	mu   sync.Mutex
+	subs map[chan string]sync.WaitGroup
+}
 
-				select {
-				case <-ctx.Done():
-					return
+func newPubSub() *pubSub {
+	return &pubSub{
+		subs: make(map[chan string]sync.WaitGroup),
+	}
+}
 
-				default:
-					time.Sleep(time.Millisecond)
-				}
-			}
-		}()
+func (ps *pubSub) notify(filename string) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
 
+	for sub, wg := range ps.subs {
 		wg.Add(1)
 		go func() {
-			defer wg.Done()
+			sub <- filename
+			wg.Done()
+		}()
+	}
+}
 
-			err := cmd.Start()
+func (ps *pubSub) subscribe(sub chan string) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
+	if wg, exists := ps.subs[sub]; exists {
+		wg.Wait()
+	}
+
+	ps.subs[sub] = sync.WaitGroup{}
+}
+
+func (ps *pubSub) unsubscribe(sub chan string) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
+	if wg, exists := ps.subs[sub]; exists {
+		wg.Add(1)
+		go func() {
+			loop := true
+			for loop {
+				select {
+				case <-sub:
+					// we might need to delay a little bit here
+
+				default:
+					loop = false
+				}
+			}
+			wg.Done()
+		}()
+		wg.Wait()
+		delete(ps.subs, sub)
+		close(sub)
+	}
+}
+
+type hotModuleReplacer struct {
+	fsys        *memFS
+	router      *memRouter
+	routeModule *routeModule
+
+	ps *pubSub
+
+	mu  sync.Mutex
+	mux *http.ServeMux
+}
+
+func newHotModuleReplacer(pagespath string) *hotModuleReplacer {
+	return &hotModuleReplacer{
+		fsys:        newMemFS(),
+		router:      newMemRouter(),
+		routeModule: newRouteModule(pagespath),
+		ps:          newPubSub(),
+		mux:         http.NewServeMux(),
+	}
+}
+
+func (hmr *hotModuleReplacer) generateServeMux() {
+	hmr.mu.Lock()
+	mux := hmr.router.newServeMux(hmr.routeModule)
+	mux.Handle("/", http.FileServerFS(hmr.fsys))
+	hmr.mux = mux
+	hmr.mu.Unlock()
+}
+
+type Message struct {
+	Type    int            ` + "`json:\"type\"`" + `
+	Payload map[string]any ` + "`json:\"payload\"`" + `
+}
+
+func (hmr *hotModuleReplacer) read(r io.Reader) {
+	decoder := json.NewDecoder(r)
+	var msg Message
+	for {
+		err := decoder.Decode(&msg)
+		if err != nil {
+			// TODO: recover
+			panic(err)
+		}
+
+		switch msg.Type {
+		case 0: // UpdateFileType
+			filename := msg.Payload["filename"].(string)
+			contents, _ := base64.StdEncoding.DecodeString(msg.Payload["contents"].(string))
+			hmr.fsys.update(filename, contents)
+			hmr.generateServeMux()
+			hmr.ps.notify(filename)
+
+		case 1: // DeleteFileType
+			filename := msg.Payload["filename"].(string)
+			hmr.fsys.remove(filename)
+			hmr.generateServeMux()
+			hmr.ps.notify(filename)
+
+		case 2: // CreateRouteType
+			pattern := msg.Payload["pattern"].(string)
+			hmr.router.add(pattern)
+			hmr.generateServeMux()
+			// TODO: notify ServeNovaHMR
+
+		// TODO: udate route, just need to notify ServeNovaHMR
+		// NOTE: DO NOT generate server mux, it's not needed because the pattern is
+		//       registered already
+
+		case 3: // DeleteRouteType
+			pattern := msg.Payload["pattern"].(string)
+			hmr.router.remove(pattern)
+			hmr.generateServeMux()
+			// TODO: notify ServeNovaHMR
+		}
+	}
+}
+
+func (hmr *hotModuleReplacer) serveNovaHMR(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	ch := make(chan string)
+	hmr.ps.subscribe(ch)
+	defer hmr.ps.unsubscribe(ch)
+
+	rc := http.NewResponseController(w)
+
+	ctx := r.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case filename := <-ch:
+			_, err := fmt.Fprintf(w, "event: change\ndata: { \"updated\": [\"%s\"] }\n\n", filename)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			cmd.Wait()
+			err = rc.Flush()
+			if err != nil {
+				return
+			}
+		}
+	}
+}
 
-			stdoutWriter.Close()
-			stdoutReader.Close()
+func (hmr *hotModuleReplacer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	hmr.mu.Lock()
+	mux := hmr.mux
+	hmr.mu.Unlock()
 
-			cancel()
-		}()
-
-		wg.Wait()
-	})
+	mux.ServeHTTP(w, r)
 }
 
 func main() {
 	mux := http.NewServeMux()
-	{{- $global := . -}}
-	{{range $filename, $handler := .Handlers}}
-	// {{$filename}}
-	{{with $render := $handler.Render}}mux.Handle("{{$render.Pattern}}", hmrModule("{{$handler.Path}}")){{end}}
-	{{range $handler.Rest}}mux.Handle("{{.Pattern}}", hmrModule("{{$handler.Path}}")){{end}}
-	{{end}}
 
-	// nova
-	ch := make(chan string, 16)
-	defer close(ch)
-	fsys := &esbuildFS{files: make(map[string][]byte)}
-	go esbuildScanner(fsys, ch)
-	mux.Handle("/", http.FileServerFS(fsys))
+	hmr := newHotModuleReplacer(filepath.Join("{{.OutDir}}", "pages"))
+	go hmr.read(os.Stdin)
+
 	mux.Handle("/@node_modules/", http.StripPrefix("/@node_modules", http.FileServer(http.Dir("{{.NodeModules}}"))))
-	mux.Handle("/@nova/hmr", hmr(ch))
+	mux.HandleFunc("/@nova/hmr", hmr.serveNovaHMR)
+	mux.Handle("/", hmr)
 
 	s := http.Server{
 		Addr:    "{{.Host}}:{{.Port}}",

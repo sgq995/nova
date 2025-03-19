@@ -1,8 +1,7 @@
 package project
 
 import (
-	"bufio"
-	"fmt"
+	"encoding/json"
 	"io"
 	"os"
 	"os/exec"
@@ -10,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sgq995/nova/internal/codegen"
 	"github.com/sgq995/nova/internal/config"
 	"github.com/sgq995/nova/internal/logger"
 	"github.com/sgq995/nova/internal/module"
@@ -105,7 +105,7 @@ func (r *runner) start(files map[string][]byte) error {
 	}
 
 	for name, contents := range files {
-		r.update(name, contents)
+		r.send(codegen.UpdateFileMessage(name, contents))
 	}
 
 	logger.Infof("server listening at http://%s:%d", r.config.Server.Host, r.config.Server.Port)
@@ -125,17 +125,23 @@ func (r *runner) restart(files map[string][]byte) error {
 	return r.start(files)
 }
 
-func (r *runner) update(name string, contents []byte) error {
-	logger.Debugf("[runner] update %s", name)
-	writer := bufio.NewWriter(r.stdin)
-	command := fmt.Sprintf("UPDATE %s %d\n", name, len(contents))
-	_, err := writer.WriteString(command)
-	if err != nil {
-		return err
-	}
-	_, err = writer.Write(contents)
-	if err != nil {
-		return err
-	}
-	return writer.Flush()
+func (r *runner) send(msg *codegen.Message) error {
+	logger.Debugf("[runner] %+v", msg.Type)
+	encoder := json.NewEncoder(r.stdin)
+	return encoder.Encode(msg)
 }
+
+// func (r *runner) update(name string, contents []byte) error {
+// 	logger.Debugf("[runner] update %s", name)
+// 	writer := bufio.NewWriter(r.stdin)
+// 	command := fmt.Sprintf("UPDATE %s %d\n", name, len(contents))
+// 	_, err := writer.WriteString(command)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	_, err = writer.Write(contents)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return writer.Flush()
+// }

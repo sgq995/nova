@@ -1,8 +1,16 @@
 package codegen
 
-import "text/template"
+import (
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
+	"text/template"
 
-const mainHMRTmpl string = `package main
+	"github.com/sgq995/nova/internal/module"
+)
+
+const mainModule string = `package main
 
 import (
 	"encoding/json"
@@ -104,16 +112,6 @@ func (w *responseWriter) WriteHeader(statusCode int) {
 }
 
 {{template "renderHandler" .}}
-// func renderHandler(root string, templates []string, render func(*template.Template, http.ResponseWriter, *http.Request) error) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		fs := os.DirFS(filepath.Join("{{.Root}}", root))
-// 		t := template.Must(template.ParseFS(fs, templates...))
-// 		err := render(t, w, r)
-// 		if err != nil {
-// 			http.Error(w, err.Error(), http.StatusInternalServerError)
-// 		}
-// 	})
-// }
 
 func main() {
 	var jsonReq request
@@ -135,8 +133,36 @@ func main() {
 }
 `
 
+var mainModuleTmpl *template.Template = generateHMRTemplate()
+
 func generateHMRTemplate() *template.Template {
-	hmrTemplate := template.Must(template.New("main.go").Parse(mainHMRTmpl))
+	hmrTemplate := template.Must(template.New("main.go").Parse(mainModule))
 	template.Must(hmrTemplate.New("renderHandler").Parse(renderHandlerFuncTmpl))
 	return hmrTemplate
+}
+
+func (c *Codegen) GenerateModule(filename string) error {
+	pagespath := module.Abs(c.config.Router.Pages)
+
+	basepath := filepath.ToSlash(module.Rel(filepath.Dir(filename)))
+	alias := strings.ReplaceAll(basepath, "/", "")
+	pkg := path.Join(module.ModuleName(), basepath)
+
+	os.MkdirAll(filepath.Dir(filename), 0755)
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	err = mainModuleTmpl.Execute(file, map[string]any{
+		"Alias":   alias,
+		"Package": pkg,
+		"Root":    pagespath,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
