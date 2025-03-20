@@ -8,7 +8,7 @@ import (
 	"github.com/sgq995/nova/internal/module"
 )
 
-const mainDevServer string = `package main
+var mainDevServer string = `package main
 
 import (
 	"bytes"
@@ -458,20 +458,20 @@ func (hmr *hotModuleReplacer) read(r io.Reader) {
 		}
 
 		switch msg.Type {
-		case 0: // UpdateFileType
+		case ` + UpdateFileType.Itoa() + `: // ` + UpdateFileType.String() + `
 			filename := msg.Payload["filename"].(string)
 			contents, _ := base64.StdEncoding.DecodeString(msg.Payload["contents"].(string))
 			hmr.fsys.update(filename, contents)
 			hmr.generateServeMux()
 			hmr.ps.notify(filename)
 
-		case 1: // DeleteFileType
+		case ` + DeleteFileType.Itoa() + `: // ` + DeleteFileType.String() + `
 			filename := msg.Payload["filename"].(string)
 			hmr.fsys.remove(filename)
 			hmr.generateServeMux()
 			hmr.ps.notify(filename)
 
-		case 2: // CreateRouteType
+		case ` + CreateRouteType.Itoa() + `: // ` + CreateRouteType.String() + `
 			pattern := msg.Payload["pattern"].(string)
 			hmr.router.add(pattern)
 			hmr.generateServeMux()
@@ -481,7 +481,7 @@ func (hmr *hotModuleReplacer) read(r io.Reader) {
 		// NOTE: DO NOT generate server mux, it's not needed because the pattern is
 		//       registered already
 
-		case 3: // DeleteRouteType
+		case ` + DeleteRouteType.Itoa() + `: // ` + DeleteRouteType.String() + `
 			pattern := msg.Payload["pattern"].(string)
 			hmr.router.remove(pattern)
 			hmr.generateServeMux()

@@ -1,5 +1,7 @@
 package codegen
 
+import "strconv"
+
 type MessageType int
 
 const (
@@ -9,6 +11,14 @@ const (
 	CreateRouteType
 	DeleteRouteType
 )
+
+func (t MessageType) Int() int {
+	return int(t)
+}
+
+func (t MessageType) Itoa() string {
+	return strconv.Itoa(t.Int())
+}
 
 func (t MessageType) String() string {
 	switch t {
