@@ -87,6 +87,10 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 		files[name] = contents
 	}
 
+	if err := c.GenerateDevelopmentServer(); err != nil {
+		logger.Errorf("%+v", err)
+	}
+
 	if err := runner.start(files); err != nil {
 		logger.Errorf("%+v", err)
 	}
@@ -101,7 +105,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 					return err
 				}
 
-				err = server.codegen.GenerateModule(filename, routes)
+				err = server.codegen.GenerateRouteModule(filename, routes)
 				if err != nil {
 					return err
 				}
@@ -126,7 +130,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 					return err
 				}
 
-				err = server.codegen.GenerateModule(filename, routes)
+				err = server.codegen.GenerateRouteModule(filename, routes)
 				if err != nil {
 					return err
 				}
@@ -262,26 +266,10 @@ func (p *projectContextImpl) Build() error {
 	if err != nil {
 		return err
 	}
-	err = c.Generate(routes)
+	err = c.GenerateProductionServer(routes)
 	if err != nil {
 		return err
 	}
 
-	return nil
-}
-
-func rebuild(s *scanner, r *router.Router, c *codegen.Codegen) error {
-	err := s.scan()
-	if err != nil {
-		return err
-	}
-	routes, err := r.ParseRoutes(s.pages)
-	if err != nil {
-		return err
-	}
-	err = c.Generate(routes)
-	if err != nil {
-		return err
-	}
 	return nil
 }

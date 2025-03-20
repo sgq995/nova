@@ -11,7 +11,7 @@ import (
 	"github.com/sgq995/nova/internal/router"
 )
 
-const mainModule string = `package main
+const mainRouteModule string = `package main
 
 import (
 	"encoding/json"
@@ -134,11 +134,11 @@ func main() {
 }
 `
 
-var mainModuleTmpl *template.Template = generateHMRTemplate()
+var mainRouteModuleTmpl *template.Template = newRouteModuleTemplate()
 
-func generateHMRTemplate() *template.Template {
-	hmrTemplate := template.Must(template.New("main.go").Parse(mainModule))
-	template.Must(hmrTemplate.New("renderHandler").Parse(renderHandlerFuncTmpl))
+func newRouteModuleTemplate() *template.Template {
+	hmrTemplate := template.Must(template.New("main.go").Parse(mainRouteModule))
+	template.Must(hmrTemplate.New("renderHandler").Parse(renderHandlerFunc))
 	return hmrTemplate
 }
 
@@ -148,7 +148,7 @@ type routeModuleHandler struct {
 	Package string
 }
 
-func (c *Codegen) GenerateModule(filename string, routes []router.Route) error {
+func (c *Codegen) GenerateRouteModule(filename string, routes []router.Route) error {
 	pagespath := module.Abs(c.config.Router.Pages)
 
 	targetpath, err := filepath.Rel(pagespath, filepath.Dir(filename))
@@ -183,7 +183,7 @@ func (c *Codegen) GenerateModule(filename string, routes []router.Route) error {
 	}
 	defer file.Close()
 
-	err = mainModuleTmpl.Execute(file, map[string]any{
+	err = mainRouteModuleTmpl.Execute(file, map[string]any{
 		"Alias":   alias,
 		"Package": pkg,
 		"Root":    pagespath,

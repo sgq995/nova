@@ -1,83 +1,14 @@
 package codegen
 
 import (
+	"os"
+	"path/filepath"
 	"text/template"
+
+	"github.com/sgq995/nova/internal/module"
 )
 
-const renderHandlerFuncTmpl string = `
-func renderHandler(root string, templates []string, render func(*template.Template, http.ResponseWriter, *http.Request) error) http.Handler {
-	{{- if .IsProd}}
-	sub := must(fs.Sub(templatesFS, root))
-	t := template.Must(template.ParseFS(sub, templates...))
-	{{- end}}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		{{if not .IsProd -}}
-		fs := os.DirFS(filepath.Join("{{.Root}}", root))
-		t := template.Must(template.ParseFS(fs, templates...)){{end}}
-		err := render(t, w, r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	})
-}
-`
-
-const mainProdTmpl string = `package main
-
-import (
-	"embed"
-	"html/template"
-	"io/fs"
-	"log"
-	"net/http"
-	{{range $alias, $package := .Imports}}
-	{{$alias}} "{{$package}}"{{end}}
-)
-
-//go:embed static
-var staticFS embed.FS
-
-//go:embed pages templates
-var htmlFS embed.FS
-
-var templatesFS fs.FS = must(fs.Sub(htmlFS, "templates"))
-
-var pagesFS fs.FS = must(fs.Sub(htmlFS, "pages"))
-
-func must[T any](obj T, err error) T {
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-
-{{template "renderHandler" .}}
-
-func main() {
-	mux := http.NewServeMux()
-	{{- $global := . -}}
-	{{range $filename, $handler := .Handlers}}
-	// {{$filename}}
-	{{with $render := $handler.Render}}mux.Handle("{{$render.Pattern}}", renderHandler("{{$render.Root}}", []string{ {{- range $render.Templates}}"{{.}}", {{end -}} }, {{$handler.Package}}.{{$render.Handler}})){{end}}
-	{{range $handler.Rest}}mux.HandleFunc("{{.Pattern}}", {{$handler.Package}}.{{.Handler}}){{end}}
-	{{end}}
-
-	// nova
-	mux.Handle("/static/", http.FileServerFS(staticFS))
-	mux.Handle("/", http.FileServerFS(pagesFS))
-	
-	s := http.Server{
-		Addr:    "{{.Host}}:{{.Port}}",
-		Handler: mux,
-	}
-	err := s.ListenAndServe()
-	if err != http.ErrServerClosed {
-		log.Fatalln(err)
-	}
-}
-`
-
-const mainDevTmpl string = `package main
+const mainDevServer string = `package main
 
 import (
 	"bytes"
@@ -94,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -617,13 +549,41 @@ func main() {
 }
 `
 
-func generateProdServerTemplate() *template.Template {
-	mainTemplate := template.Must(template.New("main.go").Parse(mainProdTmpl))
-	template.Must(mainTemplate.New("renderHandler").Parse(renderHandlerFuncTmpl))
+var mainDevServerTempl *template.Template = newDevServerTemplate()
+
+func newDevServerTemplate() *template.Template {
+	mainTemplate := template.Must(template.New("main.go").Parse(mainDevServer))
 	return mainTemplate
 }
 
-func generateDevServerTemplate() *template.Template {
-	mainTemplate := template.Must(template.New("main.go").Parse(mainDevTmpl))
-	return mainTemplate
+func (c *Codegen) GenerateDevelopmentServer() error {
+	outDir := module.Abs(c.config.Codegen.OutDir)
+	err := os.MkdirAll(outDir, 0755)
+	if err != nil {
+		return err
+	}
+
+	out := filepath.Join(outDir, "main.go")
+	file, err := os.Create(out)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	pagespath := module.Abs(c.config.Router.Pages)
+	nodemodules := module.Join("node_modules", ".nova")
+
+	err = mainDevServerTempl.Execute(file, map[string]any{
+		"IsProd":      false,
+		"Root":        pagespath,
+		"OutDir":      outDir,
+		"Host":        c.config.Server.Host,
+		"Port":        c.config.Server.Port,
+		"NodeModules": nodemodules,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
