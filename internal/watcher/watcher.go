@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/sgq995/nova/internal/logger"
 	"github.com/sgq995/nova/internal/module"
 )
 
@@ -18,7 +19,12 @@ func dispatchFunc(files []string, ecm eventCallbackMap) {
 
 		for _, cb := range matches {
 			// TODO: verify if WaitGroup is needed
-			go cb(filename)
+			go func() {
+				err := cb(filename)
+				if err != nil {
+					logger.Errorf("%+v", err)
+				}
+			}()
 		}
 	}
 }

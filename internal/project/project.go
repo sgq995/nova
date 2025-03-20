@@ -60,9 +60,10 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	runner := newRunner(p.config)
 
 	logger.Infof("starting nova dev server...")
-	if err := rebuild(scanner, r, c); err != nil {
-		return nil, err
-	}
+	// if err := rebuild(scanner, r, c); err != nil {
+	// 	return nil, err
+	// }
+	scanner.scan()
 
 	static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
 	esbuildCtx := e.Context(static)
@@ -92,42 +93,44 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 
 	go watcher.WatchDir(ctx, p.config.Router.Pages, watcher.CallbackMap{
 		"*.go": {
+			OnCreate: func(filename string) error {
+				logger.Infof("create (%s)", filename)
+
+				routes, err := server.router.ParseRoute(filename)
+				if err != nil {
+					return err
+				}
+
+				err = server.codegen.GenerateModule(filename, routes)
+				if err != nil {
+					return err
+				}
+
+				for _, route := range routes {
+					switch route := route.(type) {
+					case *router.RenderRouteGo:
+						runner.send(codegen.CreateRouteMessage(route.Pattern))
+
+					case *router.RestRouteGo:
+						runner.send(codegen.CreateRouteMessage(route.Pattern))
+					}
+				}
+
+				return nil
+			},
 			OnUpdate: func(filename string) error {
 				logger.Infof("update (%s)", filename)
 
-				// NOTE: HMR for go files only works for existing handlers by using current
-				// templates. The templates either should be update with a custom handler
-				// for development to read filesystem finding main.go or a router.json should
-				// keep all the routes and their files.
-
-				// NOTE: .nova/router.json seems to be the best approach as it holds
-				// up to date information for every path and the development mux can
-				// lookup first this file and fallback to filesystem. We should split then
-				// the template for .nova/main.go into dev and prod files to simplify it
-
-				// TODO: refactor to detect new handlers instead of new files
-				// BUG: if an existing file add a new handler for unexisting method
-				// the main file should be regenerated and restarted
-				// updateOnly := false
-				// if slices.Index(server.scanner.pages, filename) > -1 {
-				// 	updateOnly = true
-				// }
-
-				// regenerate hmr main.go files in .nova/pages
-				// TODO: optimize rebuild to only target affected main.go file
-				err := rebuild(server.scanner, server.router, server.codegen)
+				routes, err := server.router.ParseRoute(filename)
 				if err != nil {
-					logger.Errorf("%+v", err)
 					return err
 				}
 
-				r, err := server.router.ParseRoutes(server.scanner.pages)
+				err = server.codegen.GenerateModule(filename, routes)
 				if err != nil {
-					logger.Errorf("%+v", err)
 					return err
 				}
 
-				routes := r[filename]
 				for _, route := range routes {
 					switch route := route.(type) {
 					case *router.RenderRouteGo:
@@ -140,6 +143,19 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 
 				runner.send(codegen.UpdateFileMessage(filename, []byte{}))
 
+				return nil
+			},
+			OnDelete: func(filename string) error {
+				routes := server.router.Routes[filename]
+				for _, route := range routes {
+					switch route := route.(type) {
+					case *router.RenderRouteGo:
+						runner.send(codegen.DeleteRouteMessage(route.Pattern))
+
+					case *router.RestRouteGo:
+						runner.send(codegen.DeleteRouteMessage(route.Pattern))
+					}
+				}
 				return nil
 			},
 		},

@@ -8,6 +8,7 @@ import (
 	"text/template"
 
 	"github.com/sgq995/nova/internal/module"
+	"github.com/sgq995/nova/internal/router"
 )
 
 const mainModule string = `package main
@@ -124,7 +125,7 @@ func main() {
 	w := newResponseWriter()
 
 	mux := http.NewServeMux()
-	{{range $handler := .Handlers}}
+	{{with $handler := .Handler}}
 	{{with $render := .Render}}mux.Handle("{{$render.Pattern}}", renderHandler("{{$render.Root}}", []string{ {{- range $render.Templates}}"{{.}}", {{end -}} }, {{$handler.Package}}.{{$render.Handler}})){{end}}
 	{{range .Rest}}mux.HandleFunc("{{.Pattern}}", {{$handler.Package}}.{{.Handler}}){{end}}
 	{{end}}
@@ -141,15 +142,42 @@ func generateHMRTemplate() *template.Template {
 	return hmrTemplate
 }
 
-func (c *Codegen) GenerateModule(filename string) error {
+type routeModuleHandler struct {
+	Render  *router.RenderRouteGo
+	Rest    []*router.RestRouteGo
+	Package string
+}
+
+func (c *Codegen) GenerateModule(filename string, routes []router.Route) error {
 	pagespath := module.Abs(c.config.Router.Pages)
+
+	targetpath, err := filepath.Rel(pagespath, filepath.Dir(filename))
+	if err != nil {
+		return err
+	}
+	targetpath = module.Join(c.config.Codegen.OutDir, "pages", targetpath)
+	target := filepath.Join(targetpath, "main.go")
 
 	basepath := filepath.ToSlash(module.Rel(filepath.Dir(filename)))
 	alias := strings.ReplaceAll(basepath, "/", "")
 	pkg := path.Join(module.ModuleName(), basepath)
 
-	os.MkdirAll(filepath.Dir(filename), 0755)
-	file, err := os.Create(filename)
+	handler := routeModuleHandler{
+		Package: alias,
+	}
+
+	for _, route := range routes {
+		switch r := route.(type) {
+		case *router.RenderRouteGo:
+			handler.Render = r
+
+		case *router.RestRouteGo:
+			handler.Rest = append(handler.Rest, r)
+		}
+	}
+
+	os.MkdirAll(targetpath, 0755)
+	file, err := os.Create(target)
 	if err != nil {
 		return err
 	}
@@ -159,6 +187,7 @@ func (c *Codegen) GenerateModule(filename string) error {
 		"Alias":   alias,
 		"Package": pkg,
 		"Root":    pagespath,
+		"Handler": handler,
 	})
 	if err != nil {
 		return err

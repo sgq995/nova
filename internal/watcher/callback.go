@@ -10,6 +10,7 @@ import (
 type CallbackFunc func(string) error
 
 type Callback struct {
+	// TODO: better send event as value to the CallbackFunc
 	OnCreate CallbackFunc
 	OnUpdate CallbackFunc
 	OnDelete CallbackFunc

@@ -64,7 +64,7 @@ func CreateRouteMessage(pattern string) *Message {
 
 func DeleteRouteMessage(pattern string) *Message {
 	return &Message{
-		Type: DeleteFileType,
+		Type: DeleteRouteType,
 		Payload: map[string]any{
 			"pattern": pattern,
 		},

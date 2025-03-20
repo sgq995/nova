@@ -281,7 +281,9 @@ func newRouteModule(pagespath string) *routeModule {
 }
 
 func (rm *routeModule) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	filename := filepath.Join(rm.pagespath, filepath.FromSlash(r.URL.Path), "main.go")
+	upath := r.URL.Path
+	upath = strings.TrimPrefix(upath, "/api")
+	filename := filepath.Join(rm.pagespath, filepath.FromSlash(upath), "main.go")
 
 	stdoutReader, stdoutWriter, err := os.Pipe()
 	if err != nil {

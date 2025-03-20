@@ -74,23 +74,33 @@ func parseHTMLFile(filename string) Route {
 	return nil
 }
 
-func parse(c *config.Config, files []string) (map[string][]Route, error) {
-	routes := map[string][]Route{}
-	for _, filename := range files {
-		switch filepath.Ext(filename) {
-		case ".go":
-			goRoutes, err := parseGoFile(&c.Router, filename)
-			if err != nil {
-				return nil, err
-			}
-			routes[filename] = goRoutes
-
-		case ".js":
-			routes[filename] = []Route{parseJSFile(filename)}
-
-		case ".html":
-			routes[filename] = []Route{parseHTMLFile(filename)}
+func parseFile(c *config.Config, filename string) ([]Route, error) {
+	routes := []Route{}
+	switch filepath.Ext(filename) {
+	case ".go":
+		goRoutes, err := parseGoFile(&c.Router, filename)
+		if err != nil {
+			return nil, err
 		}
+		routes = append(routes, goRoutes...)
+
+	case ".js":
+		routes = append(routes, parseJSFile(filename))
+
+	case ".html":
+		routes = append(routes, parseHTMLFile(filename))
 	}
 	return routes, nil
+}
+
+func parseFiles(c *config.Config, files []string) (map[string][]Route, error) {
+	routesMap := map[string][]Route{}
+	for _, filename := range files {
+		routes, err := parseFile(c, filename)
+		if err != nil {
+			return nil, err
+		}
+		routesMap[filename] = routes
+	}
+	return routesMap, nil
 }
