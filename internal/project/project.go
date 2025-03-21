@@ -150,6 +150,8 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 				return nil
 			},
 			OnDelete: func(filename string) error {
+				logger.Infof("delete (%s)", filename)
+
 				routes := server.router.Routes[filename]
 				for _, route := range routes {
 					switch route := route.(type) {
@@ -164,46 +166,97 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 			},
 		},
 		"*.js,*.ts,*.css": {
-			OnUpdate: func(filename string) error {
-				// TODO: buffer for files added/modified in error state
-				logger.Infof("change (%s)", filename)
+			OnCreate: func(filename string) error {
+				logger.Infof("create (%s)", filename)
 
-				root := module.Abs(p.config.Router.Pages)
-				in, _ := filepath.Rel(root, filename)
-				out := module.Join(p.config.Codegen.OutDir, "static", in)
-				files, err := server.esbuild.Build()
+				err := scanner.scan()
 				if err != nil {
-					logger.Errorf("%+v", err)
 					return err
 				}
-				if contents, exists := files[out]; exists {
-					runner.send(codegen.UpdateFileMessage(in, contents))
-				} else {
-					server.esbuild.Dispose()
 
-					err := scanner.scan()
-					if err != nil {
-						logger.Errorf("%+v", err)
-						return err
-					}
-
-					static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
-					server.esbuild = e.Context(static)
-					files, err := server.esbuild.Build()
-					if err != nil {
-						logger.Errorf("%+v", err)
-						return err
-					}
-					runner.send(codegen.UpdateFileMessage(in, files[out]))
+				server.esbuild.Dispose()
+				static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
+				server.esbuild = e.Context(static)
+				files, err := server.esbuild.Build()
+				if err != nil {
+					return err
 				}
+
+				root := module.Abs(p.config.Router.Pages)
+				in, err := filepath.Rel(root, filename)
+				if err != nil {
+					return err
+				}
+				out := module.Join(p.config.Codegen.OutDir, "static", in)
+
+				contents := files[out]
+				runner.send(codegen.UpdateFileMessage(in, contents))
+
+				return nil
+			},
+			OnUpdate: func(filename string) error {
+				logger.Infof("update (%s)", filename)
+
+				files, err := server.esbuild.Build()
+				if err != nil {
+					return err
+				}
+
+				root := module.Abs(p.config.Router.Pages)
+				in, err := filepath.Rel(root, filename)
+				if err != nil {
+					return err
+				}
+				out := module.Join(p.config.Codegen.OutDir, "static", in)
+
+				contents := files[out]
+				runner.send(codegen.UpdateFileMessage(in, contents))
+
+				return nil
+			},
+			OnDelete: func(filename string) error {
+				logger.Infof("delete (%s)", filename)
+
+				err := scanner.scan()
+				if err != nil {
+					return err
+				}
+
+				server.esbuild.Dispose()
+				static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
+				server.esbuild = e.Context(static)
+				_, err = server.esbuild.Build()
+				if err != nil {
+					return err
+				}
+
+				root := module.Abs(p.config.Router.Pages)
+				in, err := filepath.Rel(root, filename)
+				if err != nil {
+					return err
+				}
+
+				runner.send(codegen.DeleteFileMessage(in))
 
 				return nil
 			},
 		},
 		"*.html": {
-			OnUpdate: func(filename string) error {
-				logger.Infof("change (%s)", filename)
+			OnCreate: func(filename string) error {
+				// TODO: create route
+				logger.Infof("create (%s)", filename)
 				runner.send(codegen.UpdateFileMessage(filename, []byte{}))
+				return nil
+			},
+			OnUpdate: func(filename string) error {
+				// TODO: update route
+				logger.Infof("update (%s)", filename)
+				runner.send(codegen.UpdateFileMessage(filename, []byte{}))
+				return nil
+			},
+			OnDelete: func(filename string) error {
+				logger.Infof("delete (%s)", filename)
+				runner.send(codegen.DeleteFileMessage(filename))
 				return nil
 			},
 		},

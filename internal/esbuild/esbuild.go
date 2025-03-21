@@ -210,7 +210,9 @@ func (esbuild *ESBuild) Build(options BuildOptions) (map[string]string, error) {
 				Name: "nova-metafile",
 				Setup: func(pb api.PluginBuild) {
 					pb.OnEnd(func(result *api.BuildResult) (api.OnEndResult, error) {
-						err := os.WriteFile(module.Join(esbuild.config.Codegen.OutDir, "metafile.json"), []byte(result.Metafile), 0755)
+						set := filepath.Base(options.Outdir)
+						name := strings.Join([]string{set, "metafile.json"}, ".")
+						err := os.WriteFile(module.Join(esbuild.config.Codegen.OutDir, name), []byte(result.Metafile), 0755)
 						return api.OnEndResult{}, err
 					})
 				},

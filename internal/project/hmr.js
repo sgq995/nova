@@ -57,12 +57,6 @@
       updateJS(updated.filter((file) => file.endsWith('.js')));
       updateCSS(updated.filter((file) => file.endsWith('.css')));
     }
-
-    // TODO: verify conditions for location.reload
-    // if (jsFiles.length > 0) {
-    // } else {
-    //   location.reload();
-    // }
   });
   window.__NOVA_HMR = sse;
 })();
