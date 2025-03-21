@@ -38,7 +38,7 @@ type serverImpl struct {
 	router  *router.Router
 	codegen *codegen.Codegen
 	runner  *runner
-	esbuild esbuild.ESBuildContext
+	esbuild *esbuild.ESBuildContext
 }
 
 func (s *serverImpl) Dispose() {
@@ -54,7 +54,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	os.Setenv("NOVA_ENV", "development")
 
 	scanner := newScanner(p.config)
-	e := esbuild.NewESBuild(p.config)
+	e := esbuild.NewESBuildContext(p.config)
 	r := router.NewRouter(p.config)
 	c := codegen.NewCodegen(p.config)
 	runner := newRunner(p.config)
@@ -66,13 +66,16 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	scanner.scan()
 
 	static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
-	esbuildCtx := e.Context(static)
+	if err := e.Define(static); err != nil {
+		return nil, err
+	}
+
 	server := &serverImpl{
 		scanner: scanner,
 		router:  r,
 		codegen: c,
 		runner:  runner,
-		esbuild: esbuildCtx,
+		esbuild: e,
 	}
 
 	// staticFiles, err := esbuildCtx.Build()
@@ -178,7 +181,11 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 				// TODO: make thread safe esbuild wrapper for context
 				server.esbuild.Dispose()
 				static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
-				server.esbuild = e.Context(static)
+				err = server.esbuild.Define(static)
+				if err != nil {
+					return err
+				}
+
 				files, err := server.esbuild.Build()
 				if err != nil {
 					return err
@@ -227,7 +234,11 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 				// TODO: make thread safe esbuild wrapper for context
 				server.esbuild.Dispose()
 				static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
-				server.esbuild = e.Context(static)
+				err = server.esbuild.Define(static)
+				if err != nil {
+					return err
+				}
+
 				_, err = server.esbuild.Build()
 				if err != nil {
 					return err

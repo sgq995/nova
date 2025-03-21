@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/sgq995/nova/internal/config"
@@ -30,18 +31,21 @@ func esbuildError(messages []api.Message) error {
 	return errors.Join(errs...)
 }
 
-type ESBuildContext interface {
-	Build() (map[string][]byte, error)
+type ESBuildContext struct {
+	config *config.Config
 
-	Dispose()
-}
-
-type esbuildContextImpl struct {
+	mu          sync.Mutex
 	app         api.BuildContext
 	nodeModules api.BuildContext
 }
 
-func (ctx *esbuildContextImpl) Build() (map[string][]byte, error) {
+func NewESBuildContext(c *config.Config) *ESBuildContext {
+	return &ESBuildContext{
+		config: c,
+	}
+}
+
+func (ctx *ESBuildContext) Build() (map[string][]byte, error) {
 	result := ctx.nodeModules.Rebuild()
 	if len(result.Errors) > 0 {
 		return nil, esbuildError(result.Errors)
@@ -60,21 +64,16 @@ func (ctx *esbuildContextImpl) Build() (map[string][]byte, error) {
 	return files, nil
 }
 
-func (ctx *esbuildContextImpl) Dispose() {
+func (ctx *ESBuildContext) Dispose() {
 	ctx.nodeModules.Dispose()
 	ctx.app.Dispose()
 }
 
-type ESBuild struct {
-	config *config.Config
-}
+func (ctx *ESBuildContext) Define(entryPoints []string) error {
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
 
-func NewESBuild(c *config.Config) *ESBuild {
-	return &ESBuild{config: c}
-}
-
-func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
-	outDir := module.Join(esbuild.config.Codegen.OutDir, "static")
+	outDir := module.Join(ctx.config.Codegen.OutDir, "static")
 
 	nodeModules := map[string]string{}
 	appCtx, ctxErr := api.Context(api.BuildOptions{
@@ -136,12 +135,12 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 		},
 	})
 	if ctxErr != nil {
-		logger.Errorf("%+v", ctxErr)
+		return ctxErr
 	}
 
 	result := appCtx.Rebuild()
 	if len(result.Errors) > 0 {
-		logger.Errorf("%+v", esbuildError(result.Errors))
+		return esbuildError(result.Errors)
 	}
 
 	nodeModulesEntries := []api.EntryPoint{}
@@ -162,7 +161,7 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 		MinifySyntax:        true,
 	})
 	if ctxErr != nil {
-		logger.Errorf("%+v", ctxErr)
+		return ctxErr
 	}
 
 	result = nodeModulesCtx.Rebuild()
@@ -170,10 +169,18 @@ func (esbuild *ESBuild) Context(entryPoints []string) ESBuildContext {
 		logger.Errorf("%+v", esbuildError(result.Errors))
 	}
 
-	return &esbuildContextImpl{
-		app:         appCtx,
-		nodeModules: nodeModulesCtx,
-	}
+	ctx.app = appCtx
+	ctx.nodeModules = nodeModulesCtx
+
+	return nil
+}
+
+type ESBuild struct {
+	config *config.Config
+}
+
+func NewESBuild(c *config.Config) *ESBuild {
+	return &ESBuild{config: c}
 }
 
 type BuildOptions struct {
