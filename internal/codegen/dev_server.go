@@ -146,6 +146,7 @@ func (mr *memRouter) remove(pattern string) {
 func (mr *memRouter) newServeMux(handler http.Handler) *http.ServeMux {
 	mux := http.NewServeMux()
 	for pattern := range mr.routes {
+		fmt.Printf("[main.go] handle %s\n", pattern)
 		mux.Handle(pattern, handler)
 	}
 	return mux
@@ -447,6 +448,74 @@ type Message struct {
 	Payload map[string]any ` + "`json:\"payload\"`" + `
 }
 
+func (hmr *hotModuleReplacer) bulk(payload map[string]any) (created []string, updated []string, deleted []string, routes []string) {
+	messages := payload["messages"].([]any)	
+	for _, msg := range messages {
+		msg := msg.(map[string]any)
+		typ := int(msg["type"].(float64))
+		payload := msg["payload"].(map[string]any)
+
+		switch typ {
+		case ` + CreateFileType.Itoa() + `: // ` + CreateFileType.String() + `
+			filename := hmr.createFile(payload)
+			created = append(created, filename)
+
+		case ` + UpdateFileType.Itoa() + `: // ` + UpdateFileType.String() + `
+			filename := hmr.updateFile(payload)
+			updated = append(updated, filename)
+			
+		case ` + DeleteFileType.Itoa() + `: // ` + DeleteFileType.String() + `
+			filename := hmr.deleteFile(payload)
+			deleted = append(deleted, filename)
+			
+		case ` + CreateRouteType.Itoa() + `: // ` + CreateRouteType.String() + `
+			pattern := hmr.createRoute(payload)
+			routes = append(routes, pattern)
+
+		// TODO: udate route, just need to notify ServeNovaHMR
+		// NOTE: DO NOT generate server mux, it's not needed because the pattern is
+		//       registered already
+
+		case ` + DeleteRouteType.Itoa() + `: // ` + DeleteRouteType.String() + `
+			pattern := hmr.deleteRoute(payload)
+			routes = append(routes, pattern)
+		}
+	}
+	return
+}
+
+func (hmr *hotModuleReplacer) createFile(payload map[string]any) string {
+	filename := payload["filename"].(string)
+	contents, _ := base64.StdEncoding.DecodeString(payload["contents"].(string))
+	hmr.fsys.update(filename, contents)
+	return filename
+}
+
+func (hmr *hotModuleReplacer) updateFile(payload map[string]any) string {
+	filename := payload["filename"].(string)
+	contents, _ := base64.StdEncoding.DecodeString(payload["contents"].(string))
+	hmr.fsys.update(filename, contents)
+	return filename
+}
+
+func (hmr *hotModuleReplacer) deleteFile(payload map[string]any) string {
+	filename := payload["filename"].(string)
+	hmr.fsys.remove(filename)
+	return filename
+}
+
+func (hmr *hotModuleReplacer) createRoute(payload map[string]any) string {
+	pattern := payload["pattern"].(string)
+	hmr.router.add(pattern)
+	return pattern
+}
+
+func (hmr *hotModuleReplacer) deleteRoute(payload map[string]any) string {
+	pattern := payload["pattern"].(string)
+	hmr.router.remove(pattern)
+	return pattern
+}
+
 func (hmr *hotModuleReplacer) read(r io.Reader) {
 	decoder := json.NewDecoder(r)
 	var msg Message
@@ -459,34 +528,47 @@ func (hmr *hotModuleReplacer) read(r io.Reader) {
 
 		switch msg.Type {
 		case ` + BulkType.Itoa() + `: // ` + BulkType.String() + `
-			fmt.Printf("%+v\n", msg)
+			created, updated, deleted, routes := hmr.bulk(msg.Payload)
+			
+			createdNotification := "\"created\":[]"
+			if len(created) > 0 {
+				createdNotification = fmt.Sprintf("\"created\": [\"%s\"]", strings.Join(created, "\",\""))
+			}
+
+			updatedNotification := "\"updated\":[]"
+			if len(updated) > 0 {
+				updatedNotification = fmt.Sprintf("\"updated\": [\"%s\"]", strings.Join(updated, "\",\""))
+			}
+
+			deletedNotification := "\"deleted\":[]"
+			if len(deleted) > 0 {
+				deletedNotification = fmt.Sprintf("\"deleted\": [\"%s\"]", strings.Join(deleted, "\",\""))
+			}
+
+			data := "{" + createdNotification + "," + updatedNotification + "," + deletedNotification + "}"
+			hmr.ps.notify(data)
+
+			if len(routes) > 0 {
+				hmr.generateServeMux()
+			}
 
 		case ` + CreateFileType.Itoa() + `: // ` + CreateFileType.String() + `
-			filename := msg.Payload["filename"].(string)
-			contents, _ := base64.StdEncoding.DecodeString(msg.Payload["contents"].(string))
-			hmr.fsys.update(filename, contents)
-			// hmr.generateServeMux()
+			filename := hmr.createFile(msg.Payload)
 			data := fmt.Sprintf("{ \"created\": [\"%s\"] }", filename)
 			hmr.ps.notify(data)
 
 		case ` + UpdateFileType.Itoa() + `: // ` + UpdateFileType.String() + `
-			filename := msg.Payload["filename"].(string)
-			contents, _ := base64.StdEncoding.DecodeString(msg.Payload["contents"].(string))
-			hmr.fsys.update(filename, contents)
-			// hmr.generateServeMux()
+			filename := hmr.updateFile(msg.Payload)
 			data := fmt.Sprintf("{ \"updated\": [\"%s\"] }", filename)
 			hmr.ps.notify(data)
 
 		case ` + DeleteFileType.Itoa() + `: // ` + DeleteFileType.String() + `
-			filename := msg.Payload["filename"].(string)
-			hmr.fsys.remove(filename)
-			// hmr.generateServeMux()
+			filename := hmr.deleteFile(msg.Payload)
 			data := fmt.Sprintf("{ \"deleted\": [\"%s\"] }", filename)
 			hmr.ps.notify(data)
 
 		case ` + CreateRouteType.Itoa() + `: // ` + CreateRouteType.String() + `
-			pattern := msg.Payload["pattern"].(string)
-			hmr.router.add(pattern)
+			hmr.createRoute(msg.Payload)
 			hmr.generateServeMux()
 			// TODO: notify ServeNovaHMR
 
@@ -495,8 +577,7 @@ func (hmr *hotModuleReplacer) read(r io.Reader) {
 		//       registered already
 
 		case ` + DeleteRouteType.Itoa() + `: // ` + DeleteRouteType.String() + `
-			pattern := msg.Payload["pattern"].(string)
-			hmr.router.remove(pattern)
+			hmr.deleteRoute(msg.Payload)
 			hmr.generateServeMux()
 			// TODO: notify ServeNovaHMR
 		}
