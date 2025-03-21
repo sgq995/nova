@@ -75,17 +75,17 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 		esbuild: esbuildCtx,
 	}
 
-	staticFiles, err := esbuildCtx.Build()
-	if err != nil {
-		return nil, err
-	}
+	// staticFiles, err := esbuildCtx.Build()
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	files := map[string][]byte{"@nova/hmr.js": hmr}
-	root := module.Join(p.config.Codegen.OutDir, "static")
-	for filename, contents := range staticFiles {
-		name, _ := filepath.Rel(root, filename)
-		files[name] = contents
-	}
+	// root := module.Join(p.config.Codegen.OutDir, "static")
+	// for filename, contents := range staticFiles {
+	// 	name, _ := filepath.Rel(root, filename)
+	// 	files[name] = contents
+	// }
 
 	if err := c.GenerateDevelopmentServer(); err != nil {
 		logger.Errorf("%+v", err)
@@ -95,6 +95,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 		logger.Errorf("%+v", err)
 	}
 
+	// TODO: make sure modifications are thread safe
 	go watcher.WatchDir(ctx, p.config.Router.Pages, watcher.CallbackMap{
 		"*.go": {
 			OnCreate: func(filename string) error {
@@ -174,6 +175,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 					return err
 				}
 
+				// TODO: make thread safe esbuild wrapper for context
 				server.esbuild.Dispose()
 				static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
 				server.esbuild = e.Context(static)
@@ -222,6 +224,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 					return err
 				}
 
+				// TODO: make thread safe esbuild wrapper for context
 				server.esbuild.Dispose()
 				static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
 				server.esbuild = e.Context(static)

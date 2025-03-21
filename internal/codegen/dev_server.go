@@ -458,18 +458,28 @@ func (hmr *hotModuleReplacer) read(r io.Reader) {
 		}
 
 		switch msg.Type {
+		case ` + CreateFileType.Itoa() + `: // ` + CreateFileType.String() + `
+			filename := msg.Payload["filename"].(string)
+			contents, _ := base64.StdEncoding.DecodeString(msg.Payload["contents"].(string))
+			hmr.fsys.update(filename, contents)
+			// hmr.generateServeMux()
+			data := fmt.Sprintf("{ \"created\": [\"%s\"] }", filename)
+			hmr.ps.notify(data)
+
 		case ` + UpdateFileType.Itoa() + `: // ` + UpdateFileType.String() + `
 			filename := msg.Payload["filename"].(string)
 			contents, _ := base64.StdEncoding.DecodeString(msg.Payload["contents"].(string))
 			hmr.fsys.update(filename, contents)
-			hmr.generateServeMux()
-			hmr.ps.notify(filename)
+			// hmr.generateServeMux()
+			data := fmt.Sprintf("{ \"updated\": [\"%s\"] }", filename)
+			hmr.ps.notify(data)
 
 		case ` + DeleteFileType.Itoa() + `: // ` + DeleteFileType.String() + `
 			filename := msg.Payload["filename"].(string)
 			hmr.fsys.remove(filename)
-			hmr.generateServeMux()
-			hmr.ps.notify(filename)
+			// hmr.generateServeMux()
+			data := fmt.Sprintf("{ \"deleted\": [\"%s\"] }", filename)
+			hmr.ps.notify(data)
 
 		case ` + CreateRouteType.Itoa() + `: // ` + CreateRouteType.String() + `
 			pattern := msg.Payload["pattern"].(string)
@@ -507,8 +517,8 @@ func (hmr *hotModuleReplacer) serveNovaHMR(w http.ResponseWriter, r *http.Reques
 		case <-ctx.Done():
 			return
 
-		case filename := <-ch:
-			_, err := fmt.Fprintf(w, "event: change\ndata: { \"updated\": [\"%s\"] }\n\n", filename)
+		case data := <-ch:
+			_, err := fmt.Fprintf(w, "event: change\ndata: %s\n\n", data)
 			if err != nil {
 				return
 			}

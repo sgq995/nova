@@ -5,7 +5,8 @@ import "strconv"
 type MessageType int
 
 const (
-	UpdateFileType MessageType = iota
+	CreateFileType MessageType = iota
+	UpdateFileType
 	DeleteFileType
 
 	CreateRouteType
@@ -22,6 +23,9 @@ func (t MessageType) Itoa() string {
 
 func (t MessageType) String() string {
 	switch t {
+	case CreateFileType:
+		return "CreateFileType"
+
 	case UpdateFileType:
 		return "UpdateFileType"
 
@@ -42,6 +46,16 @@ func (t MessageType) String() string {
 type Message struct {
 	Type    MessageType    `json:"type"`
 	Payload map[string]any `json:"payload"`
+}
+
+func CreateFileMessage(filename string, contents []byte) *Message {
+	return &Message{
+		Type: CreateFileType,
+		Payload: map[string]any{
+			"filename": filename,
+			"contents": contents,
+		},
+	}
 }
 
 func UpdateFileMessage(filename string, contents []byte) *Message {

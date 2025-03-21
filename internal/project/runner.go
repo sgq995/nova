@@ -126,7 +126,13 @@ func (r *runner) restart(files map[string][]byte) error {
 }
 
 func (r *runner) send(msg *codegen.Message) error {
-	logger.Debugf("[runner] %+v", msg.Type)
+	desc := ""
+	if filename, exists := msg.Payload["filename"]; exists {
+		desc = filename.(string)
+	} else if pattern, exists := msg.Payload["pattern"]; exists {
+		desc = pattern.(string)
+	}
+	logger.Debugf("[runner] %+v %s", msg.Type, desc)
 	encoder := json.NewEncoder(r.stdin)
 	return encoder.Encode(msg)
 }
