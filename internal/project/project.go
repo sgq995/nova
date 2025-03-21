@@ -99,10 +99,14 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	}
 
 	// TODO: make sure modifications are thread safe
-	go watcher.WatchDir(ctx, p.config.Router.Pages, watcher.CallbackMap{
-		"*.go": {
-			OnCreate: func(filename string) error {
-				logger.Infof("create (%s)", filename)
+	go watcher.WatchDir(ctx, p.config.Router.Pages, watcher.WatchCallbackMap{
+		"*.go": func(event watcher.WatchEvent, files []string) error {
+			// BUG: intentional filename declaration just to work in meantime
+			filename := files[0]
+
+			switch event {
+			case watcher.CreateEvent:
+				logger.Infof("create (%d)", len(files))
 
 				routes, err := server.router.ParseRoute(filename)
 				if err != nil {
@@ -124,10 +128,8 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 					}
 				}
 
-				return nil
-			},
-			OnUpdate: func(filename string) error {
-				logger.Infof("update (%s)", filename)
+			case watcher.UpdateEvent:
+				logger.Infof("update (%d)", len(files))
 
 				routes, err := server.router.ParseRoute(filename)
 				if err != nil {
@@ -151,9 +153,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 
 				runner.send(codegen.UpdateFileMessage(filename, []byte{}))
 
-				return nil
-			},
-			OnDelete: func(filename string) error {
+			case watcher.DeleteEvent:
 				logger.Infof("delete (%s)", filename)
 
 				routes := server.router.Routes[filename]
@@ -166,11 +166,16 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 						runner.send(codegen.DeleteRouteMessage(route.Pattern))
 					}
 				}
-				return nil
-			},
+			}
+
+			return nil
 		},
-		"*.js,*.ts,*.css": {
-			OnCreate: func(filename string) error {
+		"*.js,*.ts,*.css": func(event watcher.WatchEvent, files []string) error {
+			// BUG: intentional filename declaration just to work in meantime
+			filename := files[0]
+
+			switch event {
+			case watcher.CreateEvent:
 				logger.Infof("create (%s)", filename)
 
 				err := scanner.scan()
@@ -201,9 +206,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 				contents := files[out]
 				runner.send(codegen.UpdateFileMessage(in, contents))
 
-				return nil
-			},
-			OnUpdate: func(filename string) error {
+			case watcher.UpdateEvent:
 				logger.Infof("update (%s)", filename)
 
 				files, err := server.esbuild.Build()
@@ -221,9 +224,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 				contents := files[out]
 				runner.send(codegen.UpdateFileMessage(in, contents))
 
-				return nil
-			},
-			OnDelete: func(filename string) error {
+			case watcher.DeleteEvent:
 				logger.Infof("delete (%s)", filename)
 
 				err := scanner.scan()
@@ -251,28 +252,31 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 				}
 
 				runner.send(codegen.DeleteFileMessage(in))
+			}
 
-				return nil
-			},
+			return nil
 		},
-		"*.html": {
-			OnCreate: func(filename string) error {
+		"*.html": func(event watcher.WatchEvent, files []string) error {
+			// BUG: intentional filename declaration just to work in meantime
+			filename := files[0]
+
+			switch event {
+			case watcher.CreateEvent:
 				// TODO: create route
 				logger.Infof("create (%s)", filename)
 				runner.send(codegen.UpdateFileMessage(filename, []byte{}))
-				return nil
-			},
-			OnUpdate: func(filename string) error {
+
+			case watcher.UpdateEvent:
 				// TODO: update route
 				logger.Infof("update (%s)", filename)
 				runner.send(codegen.UpdateFileMessage(filename, []byte{}))
-				return nil
-			},
-			OnDelete: func(filename string) error {
+
+			case watcher.DeleteEvent:
 				logger.Infof("delete (%s)", filename)
 				runner.send(codegen.DeleteFileMessage(filename))
-				return nil
-			},
+			}
+
+			return nil
 		},
 	})
 

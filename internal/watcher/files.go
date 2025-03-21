@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func findFiles(root string) (map[string]time.Time, error) {
+func scanFiles(root string) (map[string]time.Time, error) {
 	files := map[string]time.Time{}
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -33,7 +33,7 @@ func findFiles(root string) (map[string]time.Time, error) {
 	return files, nil
 }
 
-func checkFiles(paths []string) (map[string]time.Time, error) {
+func lookupFiles(paths []string) (map[string]time.Time, error) {
 	files := map[string]time.Time{}
 
 	for _, filename := range paths {
