@@ -8,26 +8,7 @@ import (
 	"github.com/sgq995/nova/internal/utils"
 )
 
-func dispatchFunc(files []string, ecm eventCallbackMap) {
-	for _, filename := range files {
-		matches := ecm.match(filename)
-		if len(matches) == 0 {
-			continue
-		}
-
-		for _, cb := range matches {
-			// TODO: verify if WaitGroup is needed
-			go func() {
-				err := cb(filename)
-				if err != nil {
-					logger.Errorf("%+v", err)
-				}
-			}()
-		}
-	}
-}
-
-func dispatchEvent(callbacks WatchCallbackMap, event WatchEvent, files []string) {
+func dispatchEvent(callbacks CallbackMap, event Event, files []string) {
 	for matcher, cb := range callbacks {
 		target := make([]string, 0)
 		patterns := strings.Split(matcher, ",")
@@ -50,7 +31,7 @@ func dispatchEvent(callbacks WatchCallbackMap, event WatchEvent, files []string)
 	}
 }
 
-func dispatch(files *fileEvents, callbacks WatchCallbackMap) {
+func dispatch(files *fileEvents, callbacks CallbackMap) {
 	dispatchEvent(callbacks, CreateEvent, files.created)
 	dispatchEvent(callbacks, UpdateEvent, files.updated)
 	dispatchEvent(callbacks, DeleteEvent, files.deleted)

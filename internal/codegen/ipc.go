@@ -5,7 +5,9 @@ import "strconv"
 type MessageType int
 
 const (
-	CreateFileType MessageType = iota
+	BulkType MessageType = iota
+
+	CreateFileType
 	UpdateFileType
 	DeleteFileType
 
@@ -23,6 +25,9 @@ func (t MessageType) Itoa() string {
 
 func (t MessageType) String() string {
 	switch t {
+	case BulkType:
+		return "BulkType"
+
 	case CreateFileType:
 		return "CreateFileType"
 
@@ -46,6 +51,15 @@ func (t MessageType) String() string {
 type Message struct {
 	Type    MessageType    `json:"type"`
 	Payload map[string]any `json:"payload"`
+}
+
+func BulkMessage(messages ...*Message) *Message {
+	return &Message{
+		Type: BulkType,
+		Payload: map[string]any{
+			"messages": messages,
+		},
+	}
 }
 
 func CreateFileMessage(filename string, contents []byte) *Message {

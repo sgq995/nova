@@ -1,14 +1,14 @@
 package watcher
 
-type WatchEvent int
+type Event int
 
 const (
-	CreateEvent WatchEvent = iota
+	CreateEvent Event = iota
 	UpdateEvent
 	DeleteEvent
 )
 
-func (e WatchEvent) String() string {
+func (e Event) String() string {
 	switch e {
 	case CreateEvent:
 		return "CreateEvent"
@@ -21,6 +21,6 @@ func (e WatchEvent) String() string {
 	}
 }
 
-type WatchCallback func(event WatchEvent, files []string) error
+type CallbackFunc func(event Event, files []string) error
 
-type WatchCallbackMap map[string]WatchCallback
+type CallbackMap map[string]CallbackFunc

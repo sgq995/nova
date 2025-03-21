@@ -9,7 +9,7 @@ import (
 	"github.com/sgq995/nova/internal/module"
 )
 
-func WatchDir(ctx context.Context, dir string, callbacks WatchCallbackMap) error {
+func WatchDir(ctx context.Context, dir string, callbacks CallbackMap) error {
 	root := module.Abs(dir)
 	files := map[string]time.Time{}
 

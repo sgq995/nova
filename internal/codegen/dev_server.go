@@ -458,6 +458,9 @@ func (hmr *hotModuleReplacer) read(r io.Reader) {
 		}
 
 		switch msg.Type {
+		case ` + BulkType.Itoa() + `: // ` + BulkType.String() + `
+			fmt.Printf("%+v\n", msg)
+
 		case ` + CreateFileType.Itoa() + `: // ` + CreateFileType.String() + `
 			filename := msg.Payload["filename"].(string)
 			contents, _ := base64.StdEncoding.DecodeString(msg.Payload["contents"].(string))

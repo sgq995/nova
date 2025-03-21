@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 	_ "embed"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -60,9 +61,6 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	runner := newRunner(p.config)
 
 	logger.Infof("starting nova dev server...")
-	// if err := rebuild(scanner, r, c); err != nil {
-	// 	return nil, err
-	// }
 	scanner.scan()
 
 	static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
@@ -78,203 +76,139 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 		esbuild: e,
 	}
 
-	// staticFiles, err := esbuildCtx.Build()
-	// if err != nil {
-	// 	return nil, err
-	// }
+	if err := c.GenerateDevelopmentServer(); err != nil {
+		return nil, err
+	}
 
 	files := map[string][]byte{"@nova/hmr.js": hmr}
-	// root := module.Join(p.config.Codegen.OutDir, "static")
-	// for filename, contents := range staticFiles {
-	// 	name, _ := filepath.Rel(root, filename)
-	// 	files[name] = contents
-	// }
-
-	if err := c.GenerateDevelopmentServer(); err != nil {
-		logger.Errorf("%+v", err)
-	}
-
 	if err := runner.start(files); err != nil {
-		logger.Errorf("%+v", err)
+		return nil, err
 	}
 
-	// TODO: make sure modifications are thread safe
-	go watcher.WatchDir(ctx, p.config.Router.Pages, watcher.WatchCallbackMap{
-		"*.go": func(event watcher.WatchEvent, files []string) error {
-			// BUG: intentional filename declaration just to work in meantime
-			filename := files[0]
-
+	go watcher.WatchDir(ctx, p.config.Router.Pages, watcher.CallbackMap{
+		"*.go": func(event watcher.Event, files []string) error {
 			switch event {
-			case watcher.CreateEvent:
-				logger.Infof("create (%d)", len(files))
+			case watcher.CreateEvent, watcher.UpdateEvent:
+				logger.Infof("%s %s", event, files)
 
-				routes, err := server.router.ParseRoute(filename)
+				routesMap, err := server.router.ParseRoutes(files)
 				if err != nil {
 					return err
 				}
 
-				err = server.codegen.GenerateRouteModule(filename, routes)
-				if err != nil {
-					return err
+				for _, filename := range files {
+					err = server.codegen.GenerateRouteModule(filename, routesMap[filename])
+					if err != nil {
+						return err
+					}
 				}
+
+				routes := slices.Concat(slices.Collect(maps.Values(routesMap))...)
+				messages := []*codegen.Message{}
 
 				for _, route := range routes {
 					switch route := route.(type) {
 					case *router.RenderRouteGo:
-						runner.send(codegen.CreateRouteMessage(route.Pattern))
+						messages = append(messages, codegen.CreateRouteMessage(route.Pattern))
 
 					case *router.RestRouteGo:
-						runner.send(codegen.CreateRouteMessage(route.Pattern))
+						messages = append(messages, codegen.CreateRouteMessage(route.Pattern))
 					}
 				}
 
-			case watcher.UpdateEvent:
-				logger.Infof("update (%d)", len(files))
-
-				routes, err := server.router.ParseRoute(filename)
-				if err != nil {
-					return err
-				}
-
-				err = server.codegen.GenerateRouteModule(filename, routes)
-				if err != nil {
-					return err
-				}
-
-				for _, route := range routes {
-					switch route := route.(type) {
-					case *router.RenderRouteGo:
-						runner.send(codegen.CreateRouteMessage(route.Pattern))
-
-					case *router.RestRouteGo:
-						runner.send(codegen.CreateRouteMessage(route.Pattern))
+				if event == watcher.UpdateEvent {
+					for _, filename := range files {
+						messages = append(messages, codegen.UpdateFileMessage(filename, []byte{}))
 					}
 				}
 
-				runner.send(codegen.UpdateFileMessage(filename, []byte{}))
+				runner.send(codegen.BulkMessage(messages...))
 
 			case watcher.DeleteEvent:
-				logger.Infof("delete (%s)", filename)
+				logger.Infof("%s %s", event, files)
 
-				routes := server.router.Routes[filename]
-				for _, route := range routes {
-					switch route := route.(type) {
-					case *router.RenderRouteGo:
-						runner.send(codegen.DeleteRouteMessage(route.Pattern))
+				messages := []*codegen.Message{}
+				for _, filename := range files {
+					routes := server.router.Routes[filename]
+					for _, route := range routes {
+						switch route := route.(type) {
+						case *router.RenderRouteGo:
+							messages = append(messages, codegen.DeleteRouteMessage(route.Pattern))
 
-					case *router.RestRouteGo:
-						runner.send(codegen.DeleteRouteMessage(route.Pattern))
+						case *router.RestRouteGo:
+							messages = append(messages, codegen.DeleteRouteMessage(route.Pattern))
+						}
 					}
 				}
+
+				runner.send(codegen.BulkMessage(messages...))
 			}
 
 			return nil
 		},
-		"*.js,*.ts,*.css": func(event watcher.WatchEvent, files []string) error {
-			// BUG: intentional filename declaration just to work in meantime
-			filename := files[0]
+		"*.js,*.ts,*.css": func(event watcher.Event, files []string) error {
+			logger.Infof("%s %s", event, files)
 
-			switch event {
-			case watcher.CreateEvent:
-				logger.Infof("create (%s)", filename)
-
+			if event == watcher.CreateEvent || event == watcher.DeleteEvent {
 				err := scanner.scan()
 				if err != nil {
 					return err
 				}
-
-				// TODO: make thread safe esbuild wrapper for context
-				server.esbuild.Dispose()
 				static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
+
+				server.esbuild.Dispose()
 				err = server.esbuild.Define(static)
 				if err != nil {
 					return err
 				}
-
-				files, err := server.esbuild.Build()
-				if err != nil {
-					return err
-				}
-
-				root := module.Abs(p.config.Router.Pages)
-				in, err := filepath.Rel(root, filename)
-				if err != nil {
-					return err
-				}
-				out := module.Join(p.config.Codegen.OutDir, "static", in)
-
-				contents := files[out]
-				runner.send(codegen.UpdateFileMessage(in, contents))
-
-			case watcher.UpdateEvent:
-				logger.Infof("update (%s)", filename)
-
-				files, err := server.esbuild.Build()
-				if err != nil {
-					return err
-				}
-
-				root := module.Abs(p.config.Router.Pages)
-				in, err := filepath.Rel(root, filename)
-				if err != nil {
-					return err
-				}
-				out := module.Join(p.config.Codegen.OutDir, "static", in)
-
-				contents := files[out]
-				runner.send(codegen.UpdateFileMessage(in, contents))
-
-			case watcher.DeleteEvent:
-				logger.Infof("delete (%s)", filename)
-
-				err := scanner.scan()
-				if err != nil {
-					return err
-				}
-
-				// TODO: make thread safe esbuild wrapper for context
-				server.esbuild.Dispose()
-				static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
-				err = server.esbuild.Define(static)
-				if err != nil {
-					return err
-				}
-
-				_, err = server.esbuild.Build()
-				if err != nil {
-					return err
-				}
-
-				root := module.Abs(p.config.Router.Pages)
-				in, err := filepath.Rel(root, filename)
-				if err != nil {
-					return err
-				}
-
-				runner.send(codegen.DeleteFileMessage(in))
 			}
+
+			bundles, err := server.esbuild.Build()
+			if err != nil {
+				return err
+			}
+
+			messages := []*codegen.Message{}
+
+			root := module.Abs(p.config.Router.Pages)
+			for _, filename := range files {
+				in, err := filepath.Rel(root, filename)
+				if err != nil {
+					return err
+				}
+
+				switch event {
+				case watcher.CreateEvent, watcher.UpdateEvent:
+					out := module.Join(p.config.Codegen.OutDir, "static", in)
+					contents := bundles[out]
+					messages = append(messages, codegen.UpdateFileMessage(in, contents))
+
+				case watcher.DeleteEvent:
+					messages = append(messages, codegen.DeleteFileMessage(in))
+				}
+			}
+
+			runner.send(codegen.BulkMessage(messages...))
 
 			return nil
 		},
-		"*.html": func(event watcher.WatchEvent, files []string) error {
-			// BUG: intentional filename declaration just to work in meantime
-			filename := files[0]
+		"*.html": func(event watcher.Event, files []string) error {
+			logger.Infof("%s %s", event, files)
 
-			switch event {
-			case watcher.CreateEvent:
-				// TODO: create route
-				logger.Infof("create (%s)", filename)
-				runner.send(codegen.UpdateFileMessage(filename, []byte{}))
+			messages := []*codegen.Message{}
 
-			case watcher.UpdateEvent:
-				// TODO: update route
-				logger.Infof("update (%s)", filename)
-				runner.send(codegen.UpdateFileMessage(filename, []byte{}))
+			for _, filename := range files {
+				switch event {
+				case watcher.CreateEvent, watcher.UpdateEvent:
+					// TODO: create route
+					messages = append(messages, codegen.UpdateFileMessage(filename, []byte{}))
 
-			case watcher.DeleteEvent:
-				logger.Infof("delete (%s)", filename)
-				runner.send(codegen.DeleteFileMessage(filename))
+				case watcher.DeleteEvent:
+					messages = append(messages, codegen.DeleteFileMessage(filename))
+				}
 			}
+
+			runner.send(codegen.BulkMessage(messages...))
 
 			return nil
 		},
