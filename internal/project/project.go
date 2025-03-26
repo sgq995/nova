@@ -35,7 +35,6 @@ type projectImpl struct {
 	scanner *scanner
 	router  *router.Router
 	codegen *codegen.Codegen
-	runner  *runner
 	esbuild *esbuild.ESBuildContext
 	server  *server.Server
 }
@@ -57,7 +56,6 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Project, error) {
 	e := esbuild.NewESBuildContext(p.config)
 	r := router.NewRouter(p.config)
 	c := codegen.NewCodegen(p.config)
-	runner := newRunner(p.config)
 	s := server.New(p.config)
 
 	logger.Infof("starting nova dev server...")
@@ -72,7 +70,6 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Project, error) {
 		scanner: scanner,
 		router:  r,
 		codegen: c,
-		runner:  runner,
 		esbuild: e,
 		server:  s,
 	}
