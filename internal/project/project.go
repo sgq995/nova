@@ -2,7 +2,6 @@ package project
 
 import (
 	"context"
-	_ "embed"
 	"maps"
 	"os"
 	"path/filepath"
@@ -14,18 +13,16 @@ import (
 	"github.com/sgq995/nova/internal/logger"
 	"github.com/sgq995/nova/internal/module"
 	"github.com/sgq995/nova/internal/router"
+	"github.com/sgq995/nova/internal/server"
 	"github.com/sgq995/nova/internal/watcher"
 )
 
-//go:embed hmr.js
-var hmr []byte
-
-type Server interface {
+type Project interface {
 	Dispose()
 }
 
 type ProjectContext interface {
-	Serve(ctx context.Context) (Server, error)
+	Serve(ctx context.Context) (Project, error)
 
 	Build() error
 }
@@ -34,24 +31,26 @@ func Context(c config.Config) (ProjectContext, error) {
 	return &projectContextImpl{config: &c}, nil
 }
 
-type serverImpl struct {
+type projectImpl struct {
 	scanner *scanner
 	router  *router.Router
 	codegen *codegen.Codegen
 	runner  *runner
 	esbuild *esbuild.ESBuildContext
+	server  *server.Server
 }
 
-func (s *serverImpl) Dispose() {
-	s.esbuild.Dispose()
-	s.runner.stop()
+func (p *projectImpl) Dispose() {
+	p.esbuild.Dispose()
+	// s.runner.stop()
+	p.server.Close()
 }
 
 type projectContextImpl struct {
 	config *config.Config
 }
 
-func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
+func (p *projectContextImpl) Serve(ctx context.Context) (Project, error) {
 	os.Setenv("NOVA_ENV", "development")
 
 	scanner := newScanner(p.config)
@@ -59,6 +58,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 	r := router.NewRouter(p.config)
 	c := codegen.NewCodegen(p.config)
 	runner := newRunner(p.config)
+	s := server.New(p.config)
 
 	logger.Infof("starting nova dev server...")
 	scanner.scan()
@@ -68,22 +68,23 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 		return nil, err
 	}
 
-	server := &serverImpl{
+	project := &projectImpl{
 		scanner: scanner,
 		router:  r,
 		codegen: c,
 		runner:  runner,
 		esbuild: e,
+		server:  s,
 	}
 
-	if err := c.GenerateDevelopmentServer(); err != nil {
-		return nil, err
-	}
+	// if err := c.GenerateDevelopmentServer(); err != nil {
+	// 	return nil, err
+	// }
 
-	files := map[string][]byte{"@nova/hmr.js": hmr}
-	if err := runner.start(files); err != nil {
-		return nil, err
-	}
+	// files := map[string][]byte{"@nova/hmr.js": hmr}
+	// if err := runner.start(files); err != nil {
+	// 	return nil, err
+	// }
 
 	go watcher.WatchDir(ctx, p.config.Router.Pages, watcher.CallbackMap{
 		"*.go": func(event watcher.Event, files []string) error {
@@ -91,61 +92,62 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 			case watcher.CreateEvent, watcher.UpdateEvent:
 				logger.Infof("%s %s", event, files)
 
-				routesMap, err := server.router.ParseRoutes(files)
+				routesMap, err := project.router.ParseRoutes(files)
 				if err != nil {
 					return err
 				}
 
 				for _, filename := range files {
-					err = server.codegen.GenerateRouteModule(filename, routesMap[filename])
+					err = project.codegen.GenerateRouteModule(filename, routesMap[filename])
 					if err != nil {
 						return err
 					}
 				}
 
 				routes := slices.Concat(slices.Collect(maps.Values(routesMap))...)
-				messages := []*codegen.Message{}
+				messages := []*server.Message{}
 
 				for _, route := range routes {
 					switch route := route.(type) {
 					case *router.RenderRouteGo:
-						messages = append(messages, codegen.CreateRouteMessage(route.Pattern))
+						messages = append(messages, server.CreateRouteMessage(route.Pattern))
 
 					case *router.RestRouteGo:
-						messages = append(messages, codegen.CreateRouteMessage(route.Pattern))
+						messages = append(messages, server.CreateRouteMessage(route.Pattern))
 					}
 				}
 
 				if event == watcher.UpdateEvent {
 					for _, filename := range files {
-						messages = append(messages, codegen.UpdateFileMessage(filename, []byte{}))
+						messages = append(messages, server.UpdateFileMessage(filename, []byte{}))
 					}
 				}
 
-				runner.send(codegen.BulkMessage(messages...))
+				project.server.Send(server.BulkMessage(messages...))
 
 			case watcher.DeleteEvent:
 				logger.Infof("%s %s", event, files)
 
-				messages := []*codegen.Message{}
+				messages := []*server.Message{}
 				for _, filename := range files {
-					routes := server.router.Routes[filename]
+					routes := project.router.Routes[filename]
 					for _, route := range routes {
 						switch route := route.(type) {
 						case *router.RenderRouteGo:
-							messages = append(messages, codegen.DeleteRouteMessage(route.Pattern))
+							messages = append(messages, server.DeleteRouteMessage(route.Pattern))
 
 						case *router.RestRouteGo:
-							messages = append(messages, codegen.DeleteRouteMessage(route.Pattern))
+							messages = append(messages, server.DeleteRouteMessage(route.Pattern))
 						}
 					}
 				}
 
-				runner.send(codegen.BulkMessage(messages...))
+				project.server.Send(server.BulkMessage(messages...))
 			}
 
 			return nil
 		},
+		// TODO: esbuild watch mode + on start callback
 		"*.js,*.ts,*.css": func(event watcher.Event, files []string) error {
 			logger.Infof("%s %s", event, files)
 
@@ -156,19 +158,19 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 				}
 				static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
 
-				server.esbuild.Dispose()
-				err = server.esbuild.Define(static)
+				project.esbuild.Dispose()
+				err = project.esbuild.Define(static)
 				if err != nil {
 					return err
 				}
 			}
 
-			bundles, err := server.esbuild.Build()
+			bundles, err := project.esbuild.Build()
 			if err != nil {
 				return err
 			}
 
-			messages := []*codegen.Message{}
+			messages := []*server.Message{}
 
 			root := module.Abs(p.config.Router.Pages)
 			for _, filename := range files {
@@ -181,40 +183,42 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Server, error) {
 				case watcher.CreateEvent, watcher.UpdateEvent:
 					out := module.Join(p.config.Codegen.OutDir, "static", in)
 					contents := bundles[out]
-					messages = append(messages, codegen.UpdateFileMessage(in, contents))
+					messages = append(messages, server.UpdateFileMessage(in, contents))
 
 				case watcher.DeleteEvent:
-					messages = append(messages, codegen.DeleteFileMessage(in))
+					messages = append(messages, server.DeleteFileMessage(in))
 				}
 			}
 
-			runner.send(codegen.BulkMessage(messages...))
+			project.server.Send(server.BulkMessage(messages...))
 
 			return nil
 		},
 		"*.html": func(event watcher.Event, files []string) error {
 			logger.Infof("%s %s", event, files)
 
-			messages := []*codegen.Message{}
+			messages := []*server.Message{}
 
 			for _, filename := range files {
 				switch event {
 				case watcher.CreateEvent, watcher.UpdateEvent:
 					// TODO: create route
-					messages = append(messages, codegen.UpdateFileMessage(filename, []byte{}))
+					messages = append(messages, server.UpdateFileMessage(filename, []byte{}))
 
 				case watcher.DeleteEvent:
-					messages = append(messages, codegen.DeleteFileMessage(filename))
+					messages = append(messages, server.DeleteFileMessage(filename))
 				}
 			}
 
-			runner.send(codegen.BulkMessage(messages...))
+			project.server.Send(server.BulkMessage(messages...))
 
 			return nil
 		},
 	})
 
-	return server, nil
+	go project.server.ListenAndServe()
+
+	return project, nil
 }
 
 func (p *projectContextImpl) Build() error {
