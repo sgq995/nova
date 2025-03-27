@@ -4,7 +4,6 @@ import (
 	"context"
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 
 	"github.com/sgq995/nova/internal/codegen"
@@ -61,8 +60,20 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Project, error) {
 	logger.Infof("starting nova dev server...")
 	scanner.scan()
 
+	onBuild := func(files map[string][]byte) error {
+		messages := []*server.Message{}
+
+		for filename, contents := range files {
+			messages = append(messages, server.UpdateFileMessage(filename, contents))
+		}
+
+		s.Send(server.BulkMessage(messages...))
+
+		return nil
+	}
+
 	static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
-	if err := e.Define(static); err != nil {
+	if err := e.Start(static, onBuild); err != nil {
 		return nil, err
 	}
 
@@ -83,6 +94,17 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Project, error) {
 	// 	return nil, err
 	// }
 
+	// TODO: new approach:
+	//       - internal/pages for golang backend files, the user can create subdirectories
+	//         but routes are handled by comments //nova:route
+	//       -
+
+	// TODO: change pages directory for go files to anything else
+	//       in order to allow path parameters, there is an approach with
+	//       comments for describing funtion behavior. i.e.
+	//       //nova:route method path
+	//       method is post, put, get, GET, delete, Post
+	//       path is a valid router path, by default something like /posts/{id}
 	go watcher.WatchDir(ctx, p.config.Router.Pages, watcher.CallbackMap{
 		"*.go": func(event watcher.Event, files []string) error {
 			switch event {
@@ -145,53 +167,54 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Project, error) {
 			return nil
 		},
 		// TODO: esbuild watch mode + on start callback
-		"*.js,*.ts,*.css": func(event watcher.Event, files []string) error {
-			logger.Infof("%s %s", event, files)
+		// "*.js,*.ts,*.css": func(event watcher.Event, files []string) error {
+		// 	logger.Infof("%s %s", event, files)
 
-			if event == watcher.CreateEvent || event == watcher.DeleteEvent {
-				err := scanner.scan()
-				if err != nil {
-					return err
-				}
-				static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
+		// 	if event == watcher.CreateEvent || event == watcher.DeleteEvent {
+		// 		err := scanner.scan()
+		// 		if err != nil {
+		// 			return err
+		// 		}
+		// 		static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
 
-				project.esbuild.Dispose()
-				err = project.esbuild.Define(static)
-				if err != nil {
-					return err
-				}
-			}
+		// 		project.esbuild.Dispose()
+		// 		err = project.esbuild.Define(static)
+		// 		if err != nil {
+		// 			return err
+		// 		}
+		// 	}
 
-			bundles, err := project.esbuild.Build()
-			if err != nil {
-				return err
-			}
+		// 	bundles, err := project.esbuild.Build()
+		// 	if err != nil {
+		// 		return err
+		// 	}
 
-			messages := []*server.Message{}
+		// 	messages := []*server.Message{}
 
-			root := module.Abs(p.config.Router.Pages)
-			for _, filename := range files {
-				in, err := filepath.Rel(root, filename)
-				if err != nil {
-					return err
-				}
+		// 	root := module.Abs(p.config.Router.Pages)
+		// 	for _, filename := range files {
+		// 		in, err := filepath.Rel(root, filename)
+		// 		if err != nil {
+		// 			return err
+		// 		}
 
-				switch event {
-				case watcher.CreateEvent, watcher.UpdateEvent:
-					out := module.Join(p.config.Codegen.OutDir, "static", in)
-					contents := bundles[out]
-					messages = append(messages, server.UpdateFileMessage(in, contents))
+		// 		switch event {
+		// 		case watcher.CreateEvent, watcher.UpdateEvent:
+		// 			out := module.Join(p.config.Codegen.OutDir, "static", in)
+		// 			contents := bundles[out]
+		// 			messages = append(messages, server.UpdateFileMessage(in, contents))
 
-				case watcher.DeleteEvent:
-					messages = append(messages, server.DeleteFileMessage(in))
-				}
-			}
+		// 		case watcher.DeleteEvent:
+		// 			messages = append(messages, server.DeleteFileMessage(in))
+		// 		}
+		// 	}
 
-			project.server.Send(server.BulkMessage(messages...))
+		// 	project.server.Send(server.BulkMessage(messages...))
 
-			return nil
-		},
+		// 	return nil
+		// },
 		"*.html": func(event watcher.Event, files []string) error {
+			// TODO: search entry points into html files
 			logger.Infof("%s %s", event, files)
 
 			messages := []*server.Message{}
