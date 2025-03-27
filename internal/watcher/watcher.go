@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/sgq995/nova/internal/module"
@@ -12,6 +13,11 @@ import (
 func WatchDir(ctx context.Context, dir string, callbacks CallbackMap) error {
 	root := module.Abs(dir)
 	files := map[string]time.Time{}
+
+	patterns := []string{}
+	for matcher := range callbacks {
+		patterns = slices.Concat(patterns, strings.Split(matcher, ","))
+	}
 
 	// TODO: config scan time
 	filesTicker := time.NewTicker(250 * time.Millisecond)
@@ -23,7 +29,7 @@ func WatchDir(ctx context.Context, dir string, callbacks CallbackMap) error {
 			return nil
 
 		case <-filesTicker.C:
-			newFiles, err := scanFiles(root)
+			newFiles, err := scanFiles(root, patterns)
 			if err != nil {
 				return err
 			}

@@ -5,13 +5,28 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/sgq995/nova/internal/utils"
 )
 
-func scanFiles(root string) (map[string]time.Time, error) {
+func scanFiles(root string, patterns []string) (map[string]time.Time, error) {
 	files := map[string]time.Time{}
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+
+		matched := false
+		for _, pattern := range patterns {
+			name := filepath.Base(path)
+			if utils.Must(filepath.Match(pattern, name)) {
+				matched = true
+				break
+			}
+		}
+
+		if !matched {
+			return nil
 		}
 
 		if d.IsDir() {
