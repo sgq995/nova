@@ -16,7 +16,7 @@ func Default() Config {
 	}
 }
 
-func (cfg *Config) merge(other *Config) {
+func (cfg *Config) Merge(other *Config) {
 	cfg.Codegen.merge(&other.Codegen)
 	cfg.Router.merge(&other.Router)
 	cfg.Server.merge(&other.Server)

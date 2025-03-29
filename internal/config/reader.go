@@ -30,7 +30,7 @@ func Read(filename string) (Config, error) {
 	}
 
 	config := Default()
-	config.merge(&cfg)
+	config.Merge(&cfg)
 
 	return config, nil
 }

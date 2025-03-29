@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -10,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/sgq995/nova/internal/config"
+	"github.com/sgq995/nova/internal/fsys"
 	"github.com/sgq995/nova/internal/logger"
 	"github.com/sgq995/nova/internal/module"
 	"github.com/sgq995/nova/internal/must"
@@ -63,6 +66,25 @@ func build(c config.Config) {
 	logger.Infof("success (%s)", out)
 }
 
+func initCmd() {
+	filename := module.Abs("nova.config.json")
+
+	if must.Must(fsys.FileExists(filename)) {
+		logger.Errorf("nova.config.json already exists")
+		return
+	}
+
+	file := must.Must(os.Create(filename))
+	defer file.Close()
+
+	cfg := config.Default()
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	encoder.Encode(cfg)
+
+	logger.Infof("nova.config.json created")
+}
+
 func help() {
 	flag.Usage()
 	fmt.Fprintf(flag.CommandLine.Output(), "\n%s %s\n", os.Args[0], "dev|build")
@@ -77,14 +99,13 @@ func main() {
 
 	flag.Parse()
 
-	c := config.Default()
+	cfg := config.Default()
 	if *configFile != "" {
-		c2, err := config.Read(*configFile)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			os.Exit(1)
+		other, err := config.Read(*configFile)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			panic(err)
 		}
-		c = c2
+		cfg.Merge(&other)
 	}
 
 	args := flag.Args()
@@ -95,10 +116,13 @@ func main() {
 
 	switch args[0] {
 	case "dev":
-		dev(c)
+		dev(cfg)
 
 	case "build":
-		build(c)
+		build(cfg)
+
+	case "init":
+		initCmd()
 
 	default:
 		help()
