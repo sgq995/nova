@@ -147,7 +147,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Project, error) {
 
 	scanner := newScanner(p.config)
 	e := esbuild.NewESBuildContext(p.config)
-	r := router.NewRouter(p.config)
+	r := router.New(p.config)
 	c := codegen.NewCodegen(p.config)
 	s := server.New(p.config)
 
@@ -184,7 +184,7 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Project, error) {
 		return nil, err
 	}
 
-	go watcher.WatchDir(ctx, p.config.Router.Pages, watcher.CallbackMap{
+	go watcher.WatchDir(ctx, p.config.Router.Src, watcher.CallbackMap{
 		"*.go": project.goWatcherCallback,
 	})
 
@@ -340,7 +340,7 @@ func (p *projectContextImpl) Build() error {
 
 	e := esbuild.NewESBuild(p.config)
 	s := newScanner(p.config)
-	r := router.NewRouter(p.config)
+	r := router.New(p.config)
 	c := codegen.NewCodegen(p.config)
 
 	if err := s.scan(); err != nil {

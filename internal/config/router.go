@@ -3,49 +3,23 @@ package config
 import "path/filepath"
 
 type RouterConfig struct {
-	Pages   string // relative path to pages dir, it defaults to "src/pages"
-	APIBase string // base path for rest routes, it defaults to "/api"
+	Src  string `json:"src"` // relative path to pages dir, it defaults to "src/pages"
+	Http string `json:"http"`
 }
 
 func defaultRouterConfig() RouterConfig {
 	return RouterConfig{
-		Pages:   filepath.FromSlash("src/pages"),
-		APIBase: "/api",
+		Src:  filepath.FromSlash("src"),
+		Http: filepath.FromSlash("internal/http"),
 	}
 }
 
-func (rc *RouterConfig) merge(other *RouterConfig) {
-	if other.Pages != "" {
-		rc.Pages = other.Pages
+func (cfg *RouterConfig) merge(other *RouterConfig) {
+	if other.Src != "" {
+		cfg.Src = filepath.FromSlash(other.Src)
 	}
 
-	if other.APIBase != "" {
-		rc.APIBase = other.APIBase
-	}
-}
-
-type routerConfigFile struct {
-	Pages   *string `json:"pages"`
-	APIBase *string `json:"apiBase"`
-}
-
-func transformRouterConfigFile(rcf *routerConfigFile) RouterConfig {
-	if rcf == nil {
-		return RouterConfig{}
-	}
-
-	var pages string
-	if rcf.Pages != nil {
-		pages = filepath.FromSlash(*rcf.Pages)
-	}
-
-	var apiBase string
-	if rcf.APIBase != nil {
-		apiBase = *rcf.APIBase
-	}
-
-	return RouterConfig{
-		Pages:   pages,
-		APIBase: apiBase,
+	if other.Http != "" {
+		cfg.Http = filepath.FromSlash(other.Http)
 	}
 }

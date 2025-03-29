@@ -1,35 +1,24 @@
 package config
 
 type Config struct {
-	Router  RouterConfig
-	Codegen CodegenConfig
-	Server  ServerConfig
+	Codegen CodegenConfig `json:"codegen"`
+	Router  RouterConfig  `json:"router"`
+	Server  ServerConfig  `json:"server"`
+	Watcher WatcherConfig `json:"watcher"`
 }
 
 func Default() Config {
 	return Config{
-		Router:  defaultRouterConfig(),
 		Codegen: defaultCodegenConfig(),
+		Router:  defaultRouterConfig(),
 		Server:  defaultServerConfig(),
+		Watcher: defaultWatcherConfig(),
 	}
 }
 
-func (c *Config) merge(other *Config) {
-	c.Router.merge(&other.Router)
-	c.Codegen.merge(&other.Codegen)
-	c.Server.merge(&other.Server)
-}
-
-type configFile struct {
-	Router  *routerConfigFile  `json:"router"`
-	Codegen *codegenConfigFile `json:"codegen"`
-	Server  *serverConfigFile  `json:"dev"`
-}
-
-func transformConfigFile(cf *configFile) Config {
-	return Config{
-		Router:  transformRouterConfigFile(cf.Router),
-		Codegen: transformCodegenConfigFile(cf.Codegen),
-		Server:  transformServerConfigFile(cf.Server),
-	}
+func (cfg *Config) merge(other *Config) {
+	cfg.Codegen.merge(&other.Codegen)
+	cfg.Router.merge(&other.Router)
+	cfg.Server.merge(&other.Server)
+	cfg.Watcher.merge(&other.Watcher)
 }

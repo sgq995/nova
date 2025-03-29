@@ -149,7 +149,7 @@ type routeModuleHandler struct {
 }
 
 func (c *Codegen) GenerateRouteModule(filename string, routes []router.Route) error {
-	pagespath := module.Abs(c.config.Router.Pages)
+	pagespath := module.Abs(c.config.Router.Src)
 
 	targetpath, err := filepath.Rel(pagespath, filepath.Dir(filename))
 	if err != nil {

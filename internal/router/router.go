@@ -12,7 +12,7 @@ type Router struct {
 	config *config.Config
 }
 
-func NewRouter(c *config.Config) *Router {
+func New(c *config.Config) *Router {
 	return &Router{
 		Routes: make(map[string][]Route),
 		config: c,

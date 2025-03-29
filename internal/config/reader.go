@@ -7,30 +7,30 @@ import (
 )
 
 func readConfigFile(filename string) (Config, error) {
+	var cfg Config
+
 	b, err := os.ReadFile(filename)
 	if err != nil {
-		return Config{}, err
+		return cfg, err
 	}
 
-	var cf configFile
 	buf := bytes.NewReader(b)
-	err = json.NewDecoder(buf).Decode(&cf)
+	err = json.NewDecoder(buf).Decode(&cfg)
 	if err != nil {
-		return Config{}, err
+		return cfg, err
 	}
 
-	config := transformConfigFile(&cf)
-	return config, nil
+	return cfg, nil
 }
 
 func Read(filename string) (Config, error) {
-	cf, err := readConfigFile(filename)
+	cfg, err := readConfigFile(filename)
 	if err != nil {
 		return Config{}, err
 	}
 
 	config := Default()
-	config.merge(&cf)
+	config.merge(&cfg)
 
 	return config, nil
 }

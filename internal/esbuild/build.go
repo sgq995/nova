@@ -34,7 +34,7 @@ type BuildOptions struct {
 }
 
 func (esbuild *ESBuild) Build(options BuildOptions) (map[string]string, error) {
-	pages := module.Abs(esbuild.config.Router.Pages)
+	pages := module.Abs(esbuild.config.Router.Src)
 	entryNames := "[dir]/[name].[hash]"
 	if !options.Hashing {
 		entryNames = "[dir]/[name]"

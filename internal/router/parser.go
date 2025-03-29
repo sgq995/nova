@@ -18,7 +18,7 @@ func parseGoFile(c *config.RouterConfig, filename string) ([]Route, error) {
 		return nil, err
 	}
 
-	pagespath := module.Abs(c.Pages)
+	pagespath := module.Abs(c.Src)
 	basepath, _ := filepath.Rel(pagespath, filepath.Dir(filename))
 
 	templates, err := parser.ParseImportsGo(filename)
@@ -51,7 +51,7 @@ func parseGoFile(c *config.RouterConfig, filename string) ([]Route, error) {
 			logger.Infof("RENDER %s (%s)", routePath, filename)
 
 		case http.MethodConnect, http.MethodDelete, http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodPatch, http.MethodPost, http.MethodPut, http.MethodTrace:
-			routePath = path.Join(c.APIBase, routePath)
+			// routePath = path.Join(c.APIBase, routePath)
 
 			routes = append(routes, &RestRouteGo{
 				Pattern: method + " " + routePath,

@@ -1,8 +1,8 @@
 package config
 
 type ServerConfig struct {
-	Host string
-	Port uint16
+	Host string `json:"host"`
+	Port uint16 `json:"port"`
 }
 
 func defaultServerConfig() ServerConfig {
@@ -12,38 +12,12 @@ func defaultServerConfig() ServerConfig {
 	}
 }
 
-func (sc *ServerConfig) merge(other *ServerConfig) {
+func (cfg *ServerConfig) merge(other *ServerConfig) {
 	if other.Host != "" {
-		sc.Host = other.Host
+		cfg.Host = other.Host
 	}
 
 	if other.Port != 0 {
-		sc.Port = other.Port
-	}
-}
-
-type serverConfigFile struct {
-	Host *string `json:"host"`
-	Port *uint16 `json:"port"`
-}
-
-func transformServerConfigFile(dcf *serverConfigFile) ServerConfig {
-	if dcf == nil {
-		return ServerConfig{}
-	}
-
-	var host string
-	if dcf.Host != nil {
-		host = *dcf.Host
-	}
-
-	var port uint16
-	if dcf.Port != nil {
-		port = *dcf.Port
-	}
-
-	return ServerConfig{
-		Host: host,
-		Port: port,
+		cfg.Port = other.Port
 	}
 }

@@ -29,7 +29,7 @@ func newScanner(c *config.Config) *scanner {
 }
 
 func (p *scanner) scan() error {
-	err := p.findFiles(p.config.Router.Pages)
+	err := p.findFiles(p.config.Router.Src)
 	if err != nil {
 		return err
 	}
