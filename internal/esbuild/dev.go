@@ -198,7 +198,7 @@ func (ctx *ESBuildContext) Dispose() {
 // 	return nil
 // }
 
-func (ctx *ESBuildContext) Start(entryPoints []string, onBuild func(files map[string][]byte) error) error {
+func (ctx *ESBuildContext) Start(entryPoints []string, onEnd func(files map[string][]byte) error) error {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
@@ -280,7 +280,7 @@ func (ctx *ESBuildContext) Start(entryPoints []string, onBuild func(files map[st
 							}
 							files[filename] = file.Contents
 						}
-						onBuild(files)
+						onEnd(files)
 						return api.OnEndResult{}, nil
 					})
 				},

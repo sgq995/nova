@@ -45,6 +45,7 @@ func build(c config.Config) {
 		return
 	}
 
+	// TODO: move go build execution to nova.Build
 	in := module.Join(c.Codegen.OutDir, "main.go")
 	out := module.Join(c.Codegen.OutDir, "app")
 	cmd := exec.Command("go", "build", "-o", out, in)
