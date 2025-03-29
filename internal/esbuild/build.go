@@ -10,8 +10,8 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/sgq995/nova/internal/config"
+	"github.com/sgq995/nova/internal/fsys"
 	"github.com/sgq995/nova/internal/module"
-	"github.com/sgq995/nova/internal/utils"
 	"github.com/tdewolff/minify/v2"
 	minifyHTML "github.com/tdewolff/minify/v2/html"
 	"golang.org/x/net/html"
@@ -40,7 +40,7 @@ func (esbuild *ESBuild) Build(options BuildOptions) (map[string]string, error) {
 		entryNames = "[dir]/[name]"
 	}
 
-	utils.Clean(options.Outdir)
+	fsys.Clean(options.Outdir)
 	result := api.Build(api.BuildOptions{
 		EntryPoints:       options.EntryPoints,
 		EntryNames:        entryNames,

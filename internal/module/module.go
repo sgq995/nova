@@ -7,19 +7,20 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sgq995/nova/internal/utils"
+	"github.com/sgq995/nova/internal/fsys"
+	"github.com/sgq995/nova/internal/must"
 )
 
-var root string = utils.Must(projectRoot())
-var modName string = utils.Must(moduleName())
+var root string = must.Must(projectRoot())
+var modName string = must.Must(moduleName())
 
 func projectRoot() (string, error) {
-	root := utils.Must(os.Getwd())
+	root := must.Must(os.Getwd())
 
 	var goMod string
 	for root != filepath.Dir(root) {
 		goMod = filepath.Join(root, "go.mod")
-		exists := utils.Must(utils.FileExists(goMod))
+		exists := must.Must(fsys.FileExists(goMod))
 		if exists {
 			return root, nil
 		}
@@ -28,7 +29,7 @@ func projectRoot() (string, error) {
 	}
 
 	goMod = filepath.Join(root, "go.mod")
-	exists := utils.Must(utils.FileExists(goMod))
+	exists := must.Must(fsys.FileExists(goMod))
 	if exists {
 		return root, nil
 	}
@@ -39,7 +40,7 @@ func projectRoot() (string, error) {
 func moduleName() (string, error) {
 	goMod := filepath.Join(root, "go.mod")
 
-	file := utils.Must(os.Open(goMod))
+	file := must.Must(os.Open(goMod))
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
@@ -72,7 +73,7 @@ func Abs(path string) string {
 }
 
 func Rel(targpath string) string {
-	return utils.Must(filepath.Rel(root, targpath))
+	return must.Must(filepath.Rel(root, targpath))
 }
 
 func Join(elem ...string) string {

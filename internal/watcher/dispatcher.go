@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/sgq995/nova/internal/logger"
-	"github.com/sgq995/nova/internal/utils"
+	"github.com/sgq995/nova/internal/must"
 )
 
 func dispatchEvent(callbacks CallbackMap, event Event, files []string) {
@@ -15,7 +15,7 @@ func dispatchEvent(callbacks CallbackMap, event Event, files []string) {
 		for _, pattern := range patterns {
 			for _, filename := range files {
 				name := filepath.Base(filename)
-				if utils.Must(filepath.Match(pattern, name)) {
+				if must.Must(filepath.Match(pattern, name)) {
 					target = append(target, filename)
 				}
 			}

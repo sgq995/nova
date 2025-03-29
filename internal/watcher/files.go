@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/sgq995/nova/internal/utils"
+	"github.com/sgq995/nova/internal/must"
 )
 
 func scanFiles(root string, patterns []string) (map[string]time.Time, error) {
@@ -19,7 +19,7 @@ func scanFiles(root string, patterns []string) (map[string]time.Time, error) {
 		matched := false
 		for _, pattern := range patterns {
 			name := filepath.Base(path)
-			if utils.Must(filepath.Match(pattern, name)) {
+			if must.Must(filepath.Match(pattern, name)) {
 				matched = true
 				break
 			}

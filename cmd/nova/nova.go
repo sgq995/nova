@@ -12,17 +12,17 @@ import (
 	"github.com/sgq995/nova/internal/config"
 	"github.com/sgq995/nova/internal/logger"
 	"github.com/sgq995/nova/internal/module"
+	"github.com/sgq995/nova/internal/must"
 	"github.com/sgq995/nova/internal/project"
-	"github.com/sgq995/nova/internal/utils"
 )
 
 func dev(c config.Config) {
-	nova := utils.Must(project.Context(c))
+	nova := must.Must(project.Context(c))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	server := utils.Must(nova.Serve(ctx))
+	server := must.Must(nova.Serve(ctx))
 	defer server.Dispose()
 
 	sig := make(chan os.Signal, 1)
@@ -38,7 +38,7 @@ func dev(c config.Config) {
 }
 
 func build(c config.Config) {
-	nova := utils.Must(project.Context(c))
+	nova := must.Must(project.Context(c))
 	err := nova.Build()
 	if err != nil {
 		logger.Errorf("%+v", err)
