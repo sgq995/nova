@@ -26,3 +26,15 @@ type StaticRouteHTML struct {
 }
 
 func (r *StaticRouteHTML) route() {}
+
+type FuncRoute struct {
+	Pattern string
+	Func    string
+	Recv    string
+}
+
+func (r *FuncRoute) route() {}
+
+type StructRoute struct {
+	Pattern string
+}

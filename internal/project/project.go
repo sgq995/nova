@@ -179,12 +179,14 @@ func (p *projectContextImpl) Serve(ctx context.Context) (Project, error) {
 		server:  s,
 	}
 
+	project.router.Scan()
+
 	static := slices.Concat(scanner.jsFiles, scanner.cssFiles)
 	if err := e.Start(static, project.esbuildOnEnd); err != nil {
 		return nil, err
 	}
 
-	go watcher.WatchDir(ctx, p.config.Router.Src, watcher.CallbackMap{
+	go watcher.WatchDir(ctx, p.config.Router.Http, watcher.CallbackMap{
 		"*.go": project.goWatcherCallback,
 	})
 
