@@ -1,7 +1,7 @@
 # Nova
 .nova
 src
-internal/www
+internal/http
 package.json
 pnpm-lock.yaml
 
